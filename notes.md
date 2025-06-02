@@ -211,3 +211,5 @@
 ---
 
 _This overview reflects the current state of diffusion models as of 2024/2025, with corrections to architectural details and latest developments._
+
+[Stable diffusion notes](https://www.youtube.com/watch?v=n233GPgOHJg)

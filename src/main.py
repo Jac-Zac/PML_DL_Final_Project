@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from utils.data import get_dataloaders
+from utils.environment import get_device, set_seed
 
 # NOTE: Example class ModelArgs
 
@@ -16,7 +18,12 @@
 
 
 def main():
-    pass
+    set_seed(1337)
+    device = get_device()
+    # Get only the train dataloader for mnist
+    train_dataloader, _ = get_dataloaders()
+
+    train(num_epochs=10, device=device, dataloader=train_dataloader)
 
 
 if __name__ == "__main__":

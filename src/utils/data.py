@@ -26,7 +26,7 @@ def get_dataloaders(
             transforms.ToTensor(),
             transforms.Normalize((0.1307,), (0.3081,)),
             # NOTE: Let's keep the resize from the tutorial for now
-            [transforms.ToTensor(), transforms.Resize((28, 28))],
+            transforms.Resize((28, 28)),
         ]
     )
     train = datasets.MNIST(

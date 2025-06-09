@@ -1,29 +1,30 @@
 #!/usr/bin/env python
 
+import torch
+
+from models.diffusion import Diffusion
+from models.unet import DiffusionUNet
 from utils.data import get_dataloaders
 from utils.environment import get_device, set_seed
-
-# NOTE: Example class ModelArgs
-
-# Define the dataclass for training arguments
-# @dataclass
-# class MLPTrainingArgs:
-#     batch_size: int = 128
-#     epochs: int = 5
-#     learning_rate: float = 1e-3
-#     hidden_sizes: Sequence[int] = ((64),)
-#     optimizer: str = "Adam"  # Default optimizer
-#     criterion: str = "CrossEntropyLoss"  # Default loss criterion
-#     seed: int = 42
 
 
 def main():
     set_seed(1337)
     device = get_device()
-    # Get only the train dataloader for mnist
-    train_dataloader, _ = get_dataloaders()
 
-    train(num_epochs=10, device=device, dataloader=train_dataloader)
+    # Load your trained model here, or instantiate a new one for inference
+    model = DiffusionUNet().to(device)
+    model.eval()
+
+    diffusion = Diffusion(img_size=28, device=device)
+
+    # Here you can implement your LLaMA testing / inference code,
+    # e.g. loading test images, performing sampling, etc.
+
+    # Example: Just load test dataloader (if needed)
+    _, test_loader = get_dataloaders(batch_size=1)
+
+    # TODO: Implement your inference or LLaMA-related logic here
 
 
 if __name__ == "__main__":

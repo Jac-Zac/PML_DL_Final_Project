@@ -1,6 +1,8 @@
 #!/usr/bin/env python
-
 import argparse
+import os
+
+import torch
 
 from train.train import train
 from utils.data import get_dataloaders
@@ -30,12 +32,19 @@ def main():
 
     train_loader, _ = get_dataloaders(batch_size=args.batch_size)
 
-    train(
+    model = train(
         num_epochs=args.epochs,
         device=device,
         dataloader=train_loader,
         learning_rate=args.learning_rate,
     )
+
+    # Save the model's state_dict
+    save_dir = "checkpoints"
+    os.makedirs(save_dir, exist_ok=True)
+    save_path = os.path.join(save_dir, "unet_trained.pth")
+    torch.save(model.state_dict(), save_path)
+    print(f"Model saved to {save_path}")
 
 
 if __name__ == "__main__":

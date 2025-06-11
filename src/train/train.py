@@ -42,3 +42,4 @@ def train(
             )
 
     print("\nTraining complete.")
+    return model

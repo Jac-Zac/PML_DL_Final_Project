@@ -83,16 +83,20 @@ pip install -r requirements.txt
 
 ## 🧪 Running the Project
 
-To reproduce experiments:
+> Run the following commands inside the src directory
+
+To train the model:
 
 ```bash
-python src/main.py --config configs/experiment1.yaml
+python -m train.run
 ```
 
-Or explore interactive results in:
+To sample an image and view the different timesteps :
+
+> Saving the otutput in a custom directory
 
 ```bash
-jupyter notebook notebooks/analysis.ipynb
+python -m eval.eval --n 1 --steps 900 700 500 300 100 1 --save-dir outputs
 ```
 
 ## 👨‍👩‍👧‍👦 Contributors
@@ -108,3 +112,7 @@ This project is for academic and educational purposes.
 ---
 
 Feel free to clone, explore, and adapt the BayesDiff model for your own datasets!
+
+```
+
+```

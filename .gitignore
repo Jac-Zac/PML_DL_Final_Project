@@ -37,4 +37,5 @@
 
 # Project-specific
 **/main
+**/wandb/*
 **/data/*

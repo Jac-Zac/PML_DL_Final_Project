@@ -3,9 +3,11 @@ import argparse
 import os
 
 import matplotlib.pyplot as plt
+import torch
 
 from models.diffusion import Diffusion
 from utils.environment import get_device, load_pretrained_model
+from utils.wandb_utils import finish_wandb, initialize_wandb, log_intermediate_steps
 
 
 def save_or_show_images(images, out_dir=None, prefix="sample"):
@@ -13,7 +15,6 @@ def save_or_show_images(images, out_dir=None, prefix="sample"):
         img = img.squeeze().cpu().numpy()
         plt.imshow(img, cmap="gray")
         plt.axis("off")
-
         if out_dir:
             os.makedirs(out_dir, exist_ok=True)
             plt.savefig(
@@ -40,8 +41,11 @@ def parse_args():
         "--steps",
         type=int,
         nargs="*",
-        default=None,
-        help="Optional list of timesteps to visualize",
+        default=[1000, 800, 600, 400, 200, 0],
+        help="Timesteps to log/save",
+    )
+    parser.add_argument(
+        "--wandb", action="store_true", help="Enable logging to Weights and Biases"
     )
     return parser.parse_args()
 
@@ -50,27 +54,26 @@ def main():
     args = parse_args()
     device = get_device()
 
-    # Load model via utility function
-    model = load_pretrained_model(
-        model_name="unet",
-        model_path=args.ckpt,
-        device=device,
-        in_channels=1,
-        out_channels=1,
-        time_emb_dim=256,
-        base_channels=64,
-    )
-    model.eval()
+    if args.wandb:
+        initialize_wandb(project="diffusion-project", run_name="eval-run")
 
-    # Set up diffusion
+    model = load_pretrained_model("unet", args.ckpt, device=device, time_emb_dim=32)
+    model.eval()
     diffusion = Diffusion(img_size=28, device=device)
 
+    all_samples = []
     for i in range(args.n):
-        print(f"Sampling image {i+1}/{args.n}")
-        images = diffusion.sample(model, t_sample_times=args.steps)
+        sample_steps = diffusion.sample(
+            model, t_sample_times=args.steps, log_intermediate=True
+        )
+        all_samples.extend(sample_steps)
+        print(f"Generated sample {i+1}/{args.n}")
 
-        # Save all intermediate images
-        save_or_show_images(images, out_dir=args.save_dir, prefix=f"sample_{i}_step")
+    if args.wandb:
+        log_intermediate_steps(all_samples)
+        finish_wandb()
+
+    save_or_show_images(all_samples, out_dir=args.save_dir, prefix="step")
 
 
 if __name__ == "__main__":

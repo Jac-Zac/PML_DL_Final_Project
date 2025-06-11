@@ -101,12 +101,7 @@ class Diffusion:
         return x_prev
 
     @torch.no_grad()
-    def sample(
-        self,
-        model: nn.Module,
-        t_sample_times: Optional[List[int]] = None,
-        channels: int = 1,
-    ) -> List[Tensor]:
+    def sample(self, model, t_sample_times=None, channels=1, log_intermediate=False):
         """
         Full image sampling from noise using the learned denoising model.
         Implements Algorithm 2 in DDPM paper (Ho et al., 2020).
@@ -115,28 +110,28 @@ class Diffusion:
             model: Trained noise prediction model.
             t_sample_times: (Optional) List of timesteps at which to save intermediate outputs.
             channels: Image channels (default 1 for grayscale).
+            log_intermediate: Enable logging of intermediate results
 
         Returns:
-            List of sampled image tensors (rescaled for visualization).
+            Final sampled image tensor (rescaled for visualization).
         """
         model.eval()
-        # Start from pure Gaussian noise
         x_t = torch.randn(1, channels, self.img_size, self.img_size, device=self.device)
 
-        sampled_images = []
-
+        intermediate_images = []
         for i in reversed(range(1, self.noise_steps)):
             t = torch.full((1,), i, device=self.device, dtype=torch.long)
             x_t = self.sample_step(model, x_t, t)
 
-            # Save intermediate outputs for visualization
-            if t_sample_times and i in t_sample_times:
-                sampled_images.append(x_t.clone())
+            if log_intermediate and (t_sample_times and i in t_sample_times):
+                intermediate_images.append(self.transform_sampled_image(x_t.clone()))
 
+        final_image = self.transform_sampled_image(x_t.clone())
         model.train()
 
-        # Rescale sampled images from [-1, 1] → [0, 1]
-        return [self.transform_sampled_image(img) for img in sampled_images]
+        if log_intermediate and t_sample_times:
+            return intermediate_images + [final_image]
+        return final_image
 
     @staticmethod
     def transform_sampled_image(image: Tensor) -> Tensor:

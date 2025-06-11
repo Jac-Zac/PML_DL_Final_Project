@@ -88,7 +88,7 @@ pip install -r requirements.txt
 To train the model:
 
 ```bash
-python -m train.run
+python -m train.run --wandb --project "ddpm-mnist" --epochs 3 --batch-size 256 --tags "experiment1" "mnist"
 ```
 
 To sample an image and view the different timesteps :
@@ -96,7 +96,7 @@ To sample an image and view the different timesteps :
 > Saving the otutput in a custom directory
 
 ```bash
-python -m eval.eval --n 1 --steps 900 700 500 300 100 1 --save-dir outputs
+python -m eval.generate --n 16 --ckpt checkpoints/best_model.pth --wandb
 ```
 
 ## 👨‍👩‍👧‍👦 Contributors

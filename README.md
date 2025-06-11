@@ -83,12 +83,12 @@ pip install -r requirements.txt
 
 ## 🧪 Running the Project
 
-> Run the following commands inside the src directory
+> Run the following commands inside the root of the directory
 
 To train the model:
 
 ```bash
-python -m train.run --wandb --project "ddpm-mnist" --epochs 3 --batch-size 256 --tags "experiment1" "mnist"
+python -m src.train.run --epochs 3
 ```
 
 To sample an image and view the different timesteps :
@@ -96,7 +96,7 @@ To sample an image and view the different timesteps :
 > Saving the otutput in a custom directory
 
 ```bash
-python -m eval.generate --n 16 --ckpt checkpoints/best_model.pth --wandb
+python -m src.eval.generate --n 4 --ckpt checkpoints/best_model.pth
 ```
 
 ## 👨‍👩‍👧‍👦 Contributors

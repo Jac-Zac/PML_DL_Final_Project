@@ -10,7 +10,7 @@ def initialize_wandb(project="diffusion-project", run_name=None, config=None):
     if wandb.run is not None:
         print(f"WandB already initialized with project: {wandb.run.project}")
         return
-    wandb.login()  # will silently succeed if already logged in
+    wandb.login()
     wandb.init(project=project, name=run_name, config=config)
 
 
@@ -18,25 +18,57 @@ def log_training_step(loss: float):
     wandb.log({"train/loss_step": loss})
 
 
-def log_epoch_metrics(epoch, train_loss, val_loss, sample_images: torch.Tensor):
-    grid = vutils.make_grid(sample_images, nrow=2, normalize=True, value_range=(-1, 1))
+def log_epoch_metrics(epoch, train_loss, val_loss):
     wandb.log(
         {
             "train/loss_epoch": train_loss,
             "val/loss": val_loss,
-            "samples": wandb.Image(grid.permute(1, 2, 0).cpu().numpy()),
             "epoch": epoch,
         }
     )
 
 
-def log_intermediate_steps(sample_steps: list[torch.Tensor]):
-    """Logs intermediate sampling images for visualization."""
-    for idx, step_img in enumerate(sample_steps):
-        img = vutils.make_grid(step_img, normalize=True, value_range=(-1, 1))
-        wandb.log(
-            {f"sample_step/step_{idx}": wandb.Image(img.permute(1, 2, 0).cpu().numpy())}
+def log_intermediate_steps(samples_steps: list[torch.Tensor]):
+    """
+    samples_steps: list of tensors [timesteps * C * H * W] per sample
+    Each tensor shape: (num_timesteps * C * H * W), stacked along dim=0 for timesteps.
+
+    Goal: Create a grid where each row is a sample, each column is a timestep.
+    """
+
+    # Stack all samples along new batch dim: shape (num_samples, num_timesteps, C, H, W)
+    stacked = torch.stack(samples_steps)  # shape: [num_samples, num_timesteps*C*H*W]
+
+    # Reshape each sample from flattened timesteps to (num_timesteps, C, H, W)
+    num_samples = len(samples_steps)
+    num_timesteps = samples_steps[0].shape[0]  # number of timesteps
+    C, H, W = samples_steps[0].shape[1:]  # channels, height, width
+
+    # Reshape each sample: (num_timesteps, C, H, W)
+    stacked = stacked.view(num_samples, num_timesteps, C, H, W)
+
+    # For each timestep, gather the images for all samples -> (num_timesteps, num_samples, C, H, W)
+    stacked = stacked.permute(1, 0, 2, 3, 4)
+
+    # Create grid per timestep (samples in row)
+    grids = []
+    for t in range(num_timesteps):
+        # Make grid of samples for timestep t (batch = num_samples)
+        grid_t = vutils.make_grid(
+            stacked[t], nrow=num_samples, normalize=True, value_range=(-1, 1)
         )
+        grids.append(grid_t)
+
+    # Stack grids horizontally (side by side columns = timesteps)
+    final_grid = torch.cat(grids, dim=2)  # concat on width
+
+    wandb.log(
+        {
+            "sampling_intermediate_steps": wandb.Image(
+                final_grid.permute(1, 2, 0).cpu().numpy()
+            )
+        }
+    )
 
 
 def save_and_log_model_checkpoint(

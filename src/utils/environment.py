@@ -3,7 +3,7 @@ import random
 import numpy as np
 import torch
 
-from models.unet import DiffusionUNet
+from src.models.unet import DiffusionUNet
 
 
 def set_seed(seed):

@@ -2,10 +2,10 @@
 
 import torch
 
-from models.diffusion import Diffusion
-from models.unet import DiffusionUNet
-from utils.data import get_dataloaders
-from utils.environment import get_device, set_seed
+from src.models.diffusion import Diffusion
+from src.models.unet import DiffusionUNet
+from src.utils.data import get_dataloaders
+from src.utils.environment import get_device, set_seed
 
 
 def main():

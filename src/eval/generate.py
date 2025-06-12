@@ -2,8 +2,6 @@ import argparse
 import os
 
 import numpy as np
-import torch
-import torch.nn as nn
 
 from src.models.diffusion import Diffusion
 from src.utils.environment import get_device, load_pretrained_model
@@ -33,8 +31,8 @@ def parse_args():
     parser.add_argument(
         "--max-steps",
         type=int,
-        default=1000,
-        help="Maximum number of diffusion timesteps (default: 1000)",
+        default=50,
+        help="Maximum number of diffusion timesteps (default: 50)",
     )
     return parser.parse_args()
 
@@ -57,7 +55,7 @@ def main():
 
     for i in range(args.n):
         # This returns len(intermediate_steps)+1 images (intermediates + final)
-        sample_steps = diffusion.sample(
+        sample_steps = diffusion.sample_ddim(
             model, t_sample_times=intermediate_steps, log_intermediate=True
         )
         all_samples_grouped.append(sample_steps)

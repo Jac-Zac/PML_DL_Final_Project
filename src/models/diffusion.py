@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from torch import Tensor, nn
 
@@ -6,7 +7,7 @@ class Diffusion:
     """
     Implements the DDPM (Denoising Diffusion Probabilistic Models) process
     as proposed by Ho et al., 2020. Supports both forward (noising) and
-    reverse (denoising) diffusion steps.
+    reverse (denoising) diffusion steps. Includes DDIM sampling.
     """
 
     def __init__(
@@ -118,6 +119,87 @@ class Diffusion:
 
         if log_intermediate and t_sample_times:
             # Return intermediates including timestep zero sample plus final image
+            return intermediates + [final_image]
+        return final_image
+
+    @torch.no_grad()
+    def sample_ddim(
+        self,
+        model: nn.Module,
+        eta: float = 0.0,
+        t_sample_times: list[int] | None = None,
+        channels: int = 1,
+        log_intermediate: bool = False,
+    ) -> torch.Tensor | list[torch.Tensor]:
+        """
+        Generates a sample using DDIM (Denoising Diffusion Implicit Models).
+
+        Args:
+            model: Trained noise prediction model.
+            eta: Controls stochasticity (0 for deterministic).
+            t_sample_times: DDIM step indices to log intermediates.
+            channels: Number of image channels.
+            log_intermediate: If True, return intermediate images at specified steps.
+
+        Returns:
+            Final (or list of) sampled image(s), rescaled to [0, 1].
+        """
+        model.eval()
+
+        ddim_steps = (
+            self.noise_steps if t_sample_times is None else max(t_sample_times) + 1
+        )
+        step_indices = np.linspace(0, self.noise_steps - 1, ddim_steps, dtype=int)
+        steps = list(reversed(step_indices.tolist()))
+
+        x = torch.randn(1, channels, self.img_size, self.img_size, device=self.device)
+        intermediates = []
+
+        for i, step in enumerate(steps):
+            t = torch.full((1,), step, device=self.device, dtype=torch.long)
+            prev_step = steps[i + 1] if i < len(steps) - 1 else 0
+
+            eps_pred = model(x, t)
+
+            alpha_bar_t = self.alpha_bar[t].view(-1, 1, 1, 1)
+            alpha_bar_prev = (
+                self.alpha_bar[prev_step].view(-1, 1, 1, 1)
+                if prev_step > 0
+                else torch.ones_like(alpha_bar_t)
+            )
+
+            x0_pred = (x - torch.sqrt(1 - alpha_bar_t) * eps_pred) / torch.sqrt(
+                alpha_bar_t
+            )
+
+            dir_xt = (
+                torch.sqrt(
+                    1 - alpha_bar_prev - eta**2 * (1 - alpha_bar_t / alpha_bar_prev)
+                )
+                * eps_pred
+            )
+
+            noise_term = (
+                eta
+                * torch.sqrt(1 - alpha_bar_t / alpha_bar_prev)
+                * torch.sqrt(1 - alpha_bar_prev)
+                / torch.sqrt(1 - alpha_bar_t)
+                * torch.randn_like(x)
+                if eta > 0
+                else 0
+            )
+
+            x_prev = torch.sqrt(alpha_bar_prev) * x0_pred + dir_xt + noise_term
+
+            if log_intermediate and t_sample_times and (i + 1) in t_sample_times:
+                intermediates.append(self.transform_sampled_image(x_prev.clone()))
+
+            x = x_prev
+
+        final_image = self.transform_sampled_image(x)
+        model.train()
+
+        if log_intermediate and t_sample_times:
             return intermediates + [final_image]
         return final_image
 

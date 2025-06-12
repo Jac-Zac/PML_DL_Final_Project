@@ -4,6 +4,7 @@ import random
 import numpy as np
 import torch
 
+from src.models.transformer_net import DiffusionUViT
 from src.models.unet import DiffusionUNet
 
 
@@ -37,15 +38,26 @@ def get_device() -> torch.device:
 
 
 def load_pretrained_model(model_name, ckpt_path, device, **kwargs):
-    if model_name == "unet":
-        model = DiffusionUNet(**kwargs).to(device)
-    else:
+    # Dictionary mapping model names to their constructors
+    model_switch = {
+        "unet": DiffusionUNet,
+        "uvit": DiffusionUViT,
+        # Add other models here if needed
+    }
+
+    # Get the model constructor from the dictionary, or raise error if unknown
+    model_cls = model_switch.get(model_name)
+    if model_cls is None:
         raise ValueError(f"Unknown model name: {model_name}")
 
+    # Instantiate the model with kwargs and move to device
+    model = model_cls(**kwargs).to(device)
+
+    # Load checkpoint if path is valid
     if ckpt_path is not None and os.path.exists(ckpt_path):
         state_dict = torch.load(ckpt_path, map_location=device)
 
-        # ✅ Check if full checkpoint or raw state_dict
+        # Check if checkpoint contains full model state dict or raw state dict
         if "model_state_dict" in state_dict:
             state_dict = state_dict["model_state_dict"]
 

@@ -24,8 +24,7 @@ def main():
     set_seed(args.seed)
     device = get_device()
     os.makedirs("checkpoints", exist_ok=True)
-
-    initialize_wandb(project="ddpm-training")
+    use_wandb = False
 
     train_loader, val_loader = get_dataloaders(batch_size=args.batch_size)
     _ = train(
@@ -34,10 +33,10 @@ def main():
         dataloader=train_loader,
         val_loader=val_loader,
         learning_rate=args.lr,
-        use_wandb=True,
+        # use_wandb=True,
+        use_wandb=use_wandb,
         checkpoint_path=args.checkpoint,
     )
-    finish_wandb()
 
 
 if __name__ == "__main__":

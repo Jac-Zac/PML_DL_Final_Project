@@ -6,7 +6,9 @@ import torch.optim as optim
 from tqdm import tqdm
 
 from src.models.diffusion import Diffusion
-from src.models.unet import DiffusionUNet
+
+# from src.models.unet import DiffusionUNet
+from src.models.transformer_net import DiffusionUViT
 from src.utils.wandb import (
     finish_wandb,
     initialize_wandb,
@@ -87,7 +89,8 @@ def train(
     use_wandb: bool = False,
     checkpoint_path: Optional[str] = None,
 ):
-    model = DiffusionUNet().to(device)
+    # model = DiffusionUNet().to(device)
+    model = DiffusionUViT().to(device)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     start_epoch, best_val_loss = load_checkpoint(
         model, optimizer, checkpoint_path, device
@@ -100,7 +103,8 @@ def train(
             config={
                 "epochs": num_epochs,
                 "lr": learning_rate,
-                "model": "DiffusionUNet",
+                # "model": "DiffusionUNet",
+                "model": "DiffusionUViT",
             },
         )
 
@@ -125,11 +129,14 @@ def train(
                 best_val_loss=best_val_loss,
             )
 
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
-            log_best_model(
-                model=model, optimizer=optimizer, val_loss=best_val_loss, epoch=epoch
-            )
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                log_best_model(
+                    model=model,
+                    optimizer=optimizer,
+                    val_loss=best_val_loss,
+                    epoch=epoch,
+                )
 
         print(f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
 

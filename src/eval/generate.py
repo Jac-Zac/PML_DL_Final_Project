@@ -1,6 +1,10 @@
 import argparse
 import os
 
+import numpy as np
+import torch
+import torch.nn as nn
+
 from src.models.diffusion import Diffusion
 from src.utils.environment import get_device, load_pretrained_model
 from src.utils.plots import plot_image_grid
@@ -15,13 +19,22 @@ def parse_args():
         help="Model checkpoint",
     )
     parser.add_argument(
-        "--n", type=int, default=4, help="Number of samples to generate"
+        "--n",
+        type=int,
+        default=4,
+        help="Number of samples to generate",
     )
     parser.add_argument(
         "--save-dir",
         type=str,
         default="samples",
         help="Directory to save output image",
+    )
+    parser.add_argument(
+        "--max-steps",
+        type=int,
+        default=1000,
+        help="Maximum number of diffusion timesteps (default: 1000)",
     )
     return parser.parse_args()
 
@@ -33,23 +46,26 @@ def main():
     model = load_pretrained_model("unet", args.ckpt, device, time_emb_dim=128)
     diffusion = Diffusion(img_size=28, device=device)
 
-    steps = [800, 600, 400, 200, 0]
+    num_intermediate = 5
+
+    # Include timestep zero by extending linspace endpoint and count
+    intermediate_steps = np.linspace(
+        args.max_steps, 0, num_intermediate + 1, dtype=int
+    ).tolist()
 
     all_samples_grouped = []
 
     for i in range(args.n):
+        # This returns len(intermediate_steps)+1 images (intermediates + final)
         sample_steps = diffusion.sample(
-            model, t_sample_times=steps, log_intermediate=True
-        )
-        print(f"Sample {i+1} returned {len(sample_steps)} images")
-        assert len(sample_steps) == len(steps), (
-            f"Sample {i+1} returned {len(sample_steps)} images, "
-            f"expected {len(steps)}"
+            model, t_sample_times=intermediate_steps, log_intermediate=True
         )
         all_samples_grouped.append(sample_steps)
+        print(f"Generated sample {i + 1}")
 
-    # Flatten the grouped list after verifying lengths
+    # Flatten the list of lists: one list of all images
     flat_samples = [img for sample in all_samples_grouped for img in sample]
+    steps = intermediate_steps
 
     os.makedirs(args.save_dir, exist_ok=True)
     out_path = os.path.join(args.save_dir, "all_samples_grid.png")

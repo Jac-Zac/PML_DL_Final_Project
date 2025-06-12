@@ -88,7 +88,7 @@ class Diffusion:
         t_sample_times: list[int] | None = None,
         channels: int = 1,
         log_intermediate: bool = False,
-    ) -> Tensor | list[Tensor]:
+    ) -> torch.Tensor | list[torch.Tensor]:
         """
         Generates a sample image using reverse diffusion (Algorithm 2 in DDPM).
 
@@ -105,7 +105,8 @@ class Diffusion:
         x_t = torch.randn(1, channels, self.img_size, self.img_size, device=self.device)
         intermediates = []
 
-        for i in reversed(range(1, self.noise_steps)):
+        # Iterate from max timestep down to 0 inclusive
+        for i in reversed(range(0, self.noise_steps)):
             t = torch.full((1,), i, device=self.device, dtype=torch.long)
             x_t = self.sample_step(model, x_t, t)
 
@@ -116,6 +117,7 @@ class Diffusion:
         model.train()
 
         if log_intermediate and t_sample_times:
+            # Return intermediates including timestep zero sample plus final image
             return intermediates + [final_image]
         return final_image
 

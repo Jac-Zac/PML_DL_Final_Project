@@ -1,4 +1,5 @@
 import os
+from typing import Optional
 
 import torch
 import torch.optim as optim
@@ -24,7 +25,7 @@ def train(
     val_loader,
     learning_rate: float = 1e-3,
     use_wandb: bool = False,
-    checkpoint_path: str = None,
+    checkpoint_path: Optional[str] = None,
 ):
     model = DiffusionUNet().to(device)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)

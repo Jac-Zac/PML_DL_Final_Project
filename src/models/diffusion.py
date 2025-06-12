@@ -42,7 +42,7 @@ class Diffusion:
 
     def _sample_q(self, x_0: Tensor, t: Tensor) -> tuple[Tensor, Tensor]:
         """
-        Forward process: q(x_t | x_0) = Normal(sqrt(alphā) * x_0, (1 - alphā) * I)
+        Forward process: q(x_t | x_0) = Normal(sqrt(alpha_bar) * x_0, (1 - alph_bar) * I)
         Adds noise to clean images to simulate the forward diffusion process.
         """
 
@@ -53,7 +53,7 @@ class Diffusion:
         # Sample Gaussian noise
         noise = torch.randn_like(x_0)
 
-        # Forward noising: x_t = sqrt(alphā) * x_0 + sqrt(1 - alphā) * noise
+        # Forward noising: x_t = sqrt(alpha_bar) * x_0 + sqrt(1 - alpha_bar) * noise
         x_t = sqrt_alpha_bar * x_0 + sqrt_one_minus_alpha_bar * noise
         return x_t, noise
 

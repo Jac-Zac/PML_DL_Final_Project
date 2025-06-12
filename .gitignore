@@ -26,6 +26,7 @@
 
 # Environment/config
 **/.env
+**/.venv
 
 # Media and binary files
 **/*.pgm

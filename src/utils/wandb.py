@@ -2,6 +2,7 @@ import os
 
 import torch
 import torchvision.utils as vutils
+from dotenv import load_dotenv
 
 import wandb
 
@@ -10,7 +11,18 @@ def initialize_wandb(project="diffusion-project", run_name=None, config=None):
     if wandb.run is not None:
         print(f"WandB already initialized with project: {wandb.run.project}")
         return
-    wandb.login()
+
+    # Load environment variables from .env if present
+    load_dotenv()
+
+    # Get the W&B API key from environment variable
+    wandb_api_key = os.getenv("WANDB_API_KEY")
+    if wandb_api_key is None:
+        raise ValueError("WANDB_API_KEY environment variable not set")
+
+    # Login using the API key
+    wandb.login(key=wandb_api_key)
+
     wandb.init(project=project, name=run_name, config=config)
 
 

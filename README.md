@@ -1,5 +1,12 @@
 # BayesDiff: A Bayesian Nonparametric Approach to Differential Analysis of Genomic Data
 
+# TODO:
+
+- Check if the sampling is working correctly
+- Modify the model to have a linear layer at the end
+- Modify the validation to use the fast sampling instead
+- Try to do LLLA after you have changed the last layer to be linear
+
 ## 📘 Project Overview
 
 This is the final project for the **Probabilistic Machine Learning and Deep Learning** course. In this project, we explore, analyze, and re-implement the methodology presented in the paper:

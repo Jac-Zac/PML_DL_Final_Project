@@ -30,7 +30,7 @@ def main():
     args = parse_args()
 
     device = get_device()
-    model = load_pretrained_model("unet", args.ckpt, device, time_emb_dim=32)
+    model = load_pretrained_model("unet", args.ckpt, device, time_emb_dim=128)
     diffusion = Diffusion(img_size=28, device=device)
 
     steps = [800, 600, 400, 200, 0]

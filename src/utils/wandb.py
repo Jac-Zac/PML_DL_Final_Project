@@ -72,11 +72,28 @@ def log_intermediate_steps(samples_steps: list[torch.Tensor]):
 
 
 def save_and_log_model_checkpoint(
-    model, epoch: int, train_loss: float, val_loss: float, checkpoint_dir="checkpoints"
+    model,
+    optimizer,
+    epoch: int,
+    train_loss: float,
+    val_loss: float,
+    best_val_loss: float,
+    checkpoint_dir="checkpoints",
 ):
     os.makedirs(checkpoint_dir, exist_ok=True)
     path = os.path.join(checkpoint_dir, f"epoch_{epoch}.pth")
-    torch.save(model.state_dict(), path)
+
+    torch.save(
+        {
+            "epoch": epoch,
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "train_loss": train_loss,
+            "val_loss": val_loss,
+            "best_val_loss": best_val_loss,
+        },
+        path,
+    )
 
     artifact = wandb.Artifact(
         f"model-epoch-{epoch}",
@@ -87,8 +104,18 @@ def save_and_log_model_checkpoint(
     wandb.log_artifact(artifact)
 
 
-def log_best_model(model, val_loss: float, path="checkpoints/best_model.pth"):
-    torch.save(model.state_dict(), path)
+def log_best_model(
+    model, optimizer, val_loss: float, epoch: int, path="checkpoints/best_model.pth"
+):
+    torch.save(
+        {
+            "epoch": epoch,
+            "model_state_dict": model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "best_val_loss": val_loss,
+        },
+        path,
+    )
     wandb.summary["best_val_loss"] = val_loss
 
 

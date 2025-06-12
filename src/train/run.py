@@ -13,6 +13,9 @@ def parse_args():
     parser.add_argument("--batch-size", type=int, default=128, help="Batch size")
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
     parser.add_argument("--seed", type=int, default=1337, help="Random seed")
+    parser.add_argument(
+        "--checkpoint", type=str, default=None, help="Path to checkpoint"
+    )
     return parser.parse_args()
 
 
@@ -32,6 +35,7 @@ def main():
         val_loader=val_loader,
         learning_rate=args.lr,
         use_wandb=True,
+        checkpoint_path=args.checkpoint,
     )
     finish_wandb()
 

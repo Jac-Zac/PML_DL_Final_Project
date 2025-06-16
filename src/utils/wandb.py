@@ -93,46 +93,54 @@ def log_best_model(
 def log_sample_grid(
     model, diffusion, num_samples=5, num_timesteps=6, max_timesteps=1000
 ):
-    # t_sample_times = torch.linspace(
-    #     max_timesteps, 0, steps=num_timesteps, dtype=torch.int32
-    # ).tolist()
+    t_sample_times = torch.linspace(
+        max_timesteps, 0, steps=num_timesteps, dtype=torch.int32
+    ).tolist()
 
     samples_steps = []
     with torch.no_grad():
-        for _ in range(num_samples):
+        for class_label in range(num_samples):
+            y = torch.tensor(
+                [class_label], device=diffusion.device
+            )  # conditioning label
+
+            # Assuming diffusion.sample can accept conditioning label y (you'll need to modify diffusion.sample too)
             steps = diffusion.sample(
                 model,
-                t_sample_times=[1000, 800, 600, 400, 200, 0],
+                t_sample_times=t_sample_times,
                 log_intermediate=True,
+                y=y,  # pass conditioning
             )
+            # Concatenate all steps (timestep images) along batch dim (time)
             samples_steps.append(torch.cat(steps, dim=0))
 
-    # Stack all samples along new batch dim: shape (num_samples, num_timesteps, C, H, W)
-    stacked = torch.stack(samples_steps)  # shape: [num_samples, num_timesteps*C*H*W]
+    # Stack samples: shape [num_samples, num_timesteps * C * H * W]
+    stacked = torch.stack(samples_steps)
 
-    # Reshape each sample from flattened timesteps to (num_timesteps, C, H, W)
     num_samples = len(samples_steps)
-    num_timesteps = samples_steps[0].shape[0]  # number of timesteps
+    num_timesteps = samples_steps[0].shape[0]  # number of timesteps per sample
     C, H, W = samples_steps[0].shape[1:]  # channels, height, width
 
-    # Reshape each sample: (num_timesteps, C, H, W)
+    # Reshape to [num_samples, num_timesteps, C, H, W]
     stacked = stacked.view(num_samples, num_timesteps, C, H, W)
 
-    # For each timestep, gather the images for all samples -> (num_timesteps, num_samples, C, H, W)
-    stacked = stacked.permute(1, 0, 2, 3, 4)
+    # We want to create a grid where each row is a sample and each column a timestep
+    # So for each sample, concatenate images from all timesteps horizontally
+    rows = []
+    for sample_idx in range(num_samples):
+        # Take all timestep images for this sample: shape (num_timesteps, C, H, W)
+        sample_images = stacked[sample_idx]
 
-    # Create grid per timestep (samples in row)
-    grids = []
-    for t in range(num_timesteps):
-        # Make grid of samples for timestep t (batch = num_samples)
-        grid_t = vutils.make_grid(
-            stacked[t], nrow=num_samples, normalize=True, value_range=(-1, 1)
+        # Make grid horizontally (nrow=num_timesteps) for this sample
+        row_grid = vutils.make_grid(
+            sample_images, nrow=num_timesteps, normalize=True, value_range=(-1, 1)
         )
-        grids.append(grid_t)
+        rows.append(row_grid)
 
-    # Stack grids horizontally (side by side columns = timesteps)
-    final_grid = torch.cat(grids, dim=2)  # concat on width
+    # Stack all sample rows vertically (dim=1 for height)
+    final_grid = torch.cat(rows, dim=1)  # concat on height
 
+    # Log to wandb
     wandb.log(
         {
             "sampling_intermediate_steps": wandb.Image(

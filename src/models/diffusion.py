@@ -29,17 +29,12 @@ class Diffusion:
         self.alpha_bar = torch.cumprod(self.alpha, dim=0)
 
     def _prepare_noise_schedule(self) -> Tensor:
-        """Generates a linear noise schedule (beta)."""
         return torch.linspace(self.beta_start, self.beta_end, self.noise_steps)
 
     def _sample_timesteps(self, batch_size: int) -> Tensor:
-        """Samples a random timestep for each element in the batch."""
         return torch.randint(1, self.noise_steps, (batch_size,), device=self.device)
 
     def _sample_q(self, x_0: Tensor, t: Tensor) -> tuple[Tensor, Tensor]:
-        """
-        Simulates forward diffusion: q(x_t | x_0) = N(√ᾱ_t x_0, (1-ᾱ_t)I).
-        """
         sqrt_alpha_bar = self.alpha_bar[t].sqrt().view(-1, 1, 1, 1)
         sqrt_one_minus_alpha_bar = (1 - self.alpha_bar[t]).sqrt().view(-1, 1, 1, 1)
         noise = torch.randn_like(x_0)
@@ -48,33 +43,39 @@ class Diffusion:
 
     @staticmethod
     def loss_simple(epsilon: Tensor, epsilon_pred: Tensor) -> Tensor:
-        """Computes the MSE loss between predicted and actual noise."""
         return nn.functional.mse_loss(epsilon_pred, epsilon)
 
-    def perform_training_step(self, model: nn.Module, x_0: Tensor) -> Tensor:
+    def perform_training_step(
+        self,
+        model: nn.Module,
+        x_0: Tensor,
+        y: Tensor | None = None,  # <-- accept labels here
+    ) -> Tensor:
         """
         Executes a single DDPM training step:
         - Samples timestep
         - Noises image
-        - Predicts noise
-        - Computes loss
+        - Predicts noise (with optional class conditioning)
+        - Computes MSE loss
         """
         x_0 = x_0.to(self.device)
         t = self._sample_timesteps(x_0.size(0))
         x_t, noise = self._sample_q(x_0, t)
-        noise_pred = model(x_t, t)
+
+        # pass y through to the model’s forward
+        noise_pred = model(x_t, t, y=y)
         return self.loss_simple(noise, noise_pred)
 
     @torch.no_grad()
-    def sample_step(self, model: nn.Module, x_t: Tensor, t: Tensor) -> Tensor:
-        """
-        Computes one reverse sampling step to obtain x_{t-1} from x_t.
-        """
+    def sample_step(
+        self, model: nn.Module, x_t: Tensor, t: Tensor, y: torch.Tensor | None = None
+    ) -> Tensor:
         beta_t = self.beta[t].view(-1, 1, 1, 1)
         alpha_t = self.alpha[t].view(-1, 1, 1, 1)
         alpha_bar_t = self.alpha_bar[t].view(-1, 1, 1, 1)
 
-        noise_pred = model(x_t, t)
+        # Pass conditioning y to the model
+        noise_pred = model(x_t, t, y=y)
         z = torch.randn_like(x_t) if t[0] > 1 else torch.zeros_like(x_t)
 
         coef1 = 1 / alpha_t.sqrt()
@@ -89,27 +90,17 @@ class Diffusion:
         t_sample_times: list[int] | None = None,
         channels: int = 1,
         log_intermediate: bool = False,
+        y: torch.Tensor | None = None,  # conditioning label (optional)
     ) -> torch.Tensor | list[torch.Tensor]:
-        """
-        Generates a sample image using reverse diffusion (Algorithm 2 in DDPM).
-
-        Args:
-            model: Trained noise prediction model.
-            t_sample_times: Timesteps at which intermediate images should be saved.
-            channels: Number of image channels (1 = grayscale, 3 = RGB).
-            log_intermediate: If True, returns intermediate images.
-
-        Returns:
-            Final (or list of) sampled image(s), rescaled to [0, 1].
-        """
         model.eval()
         x_t = torch.randn(1, channels, self.img_size, self.img_size, device=self.device)
         intermediates = []
 
-        # Iterate from max timestep down to 0 inclusive
         for i in reversed(range(0, self.noise_steps)):
             t = torch.full((1,), i, device=self.device, dtype=torch.long)
-            x_t = self.sample_step(model, x_t, t)
+
+            # Pass conditioning y to sample_step as well
+            x_t = self.sample_step(model, x_t, t, y)
 
             if log_intermediate and t_sample_times and i in t_sample_times:
                 intermediates.append(self.transform_sampled_image(x_t.clone()))
@@ -118,7 +109,6 @@ class Diffusion:
         model.train()
 
         if log_intermediate and t_sample_times:
-            # Return intermediates including timestep zero sample plus final image
             return intermediates + [final_image]
         return final_image
 
@@ -131,19 +121,6 @@ class Diffusion:
         channels: int = 1,
         log_intermediate: bool = False,
     ) -> torch.Tensor | list[torch.Tensor]:
-        """
-        Generates a sample using DDIM (Denoising Diffusion Implicit Models).
-
-        Args:
-            model: Trained noise prediction model.
-            eta: Controls stochasticity (0 for deterministic).
-            t_sample_times: DDIM step indices to log intermediates.
-            channels: Number of image channels.
-            log_intermediate: If True, return intermediate images at specified steps.
-
-        Returns:
-            Final (or list of) sampled image(s), rescaled to [0, 1].
-        """
         model.eval()
 
         ddim_steps = (
@@ -160,7 +137,6 @@ class Diffusion:
             prev_step = steps[i + 1] if i < len(steps) - 1 else 0
 
             eps_pred = model(x, t)
-
             alpha_bar_t = self.alpha_bar[t].view(-1, 1, 1, 1)
             alpha_bar_prev = (
                 self.alpha_bar[prev_step].view(-1, 1, 1, 1)
@@ -205,5 +181,4 @@ class Diffusion:
 
     @staticmethod
     def transform_sampled_image(image: Tensor) -> Tensor:
-        """Rescales image tensor values from [-1, 1] to [0, 1]."""
         return (image.clamp(-1, 1) + 1) / 2

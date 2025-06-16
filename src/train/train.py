@@ -21,10 +21,12 @@ def train_one_epoch(model, dataloader, optimizer, diffusion, device, use_wandb):
     model.train()
     total_loss = 0.0
 
-    for images, _ in tqdm(dataloader, desc="Training", leave=False):
+    for images, labels in tqdm(dataloader, desc="Training", leave=False):
         images = images.to(device) * 2 - 1  # Normalize to [-1, 1]
+        y = labels.to(device)  # Class labels for conditioning
+
         optimizer.zero_grad()
-        loss = diffusion.perform_training_step(model, images)
+        loss = diffusion.perform_training_step(model, images, y=y)
         loss.backward()
         optimizer.step()
 
@@ -42,9 +44,11 @@ def validate(model, val_loader, diffusion, device):
     total_loss = 0.0
 
     with torch.no_grad():
-        for images, _ in tqdm(val_loader, desc="Validating", leave=False):
+        for images, labels in tqdm(val_loader, desc="Validating", leave=False):
             images = images.to(device) * 2 - 1
-            loss = diffusion.perform_training_step(model, images)
+            y = labels.to(device)
+
+            loss = diffusion.perform_training_step(model, images, y=y)
             total_loss += loss.item()
 
     return total_loss / len(val_loader)
@@ -59,7 +63,10 @@ def train(
     use_wandb: bool = False,
     checkpoint_path: Optional[str] = None,
 ):
-    model = DiffusionUNet().to(device)
+    # Instantiate model with the number of classes in your dataset (e.g. 10 for MNIST)
+    num_classes = len(dataloader.dataset.classes)
+    model = DiffusionUNet(num_classes=num_classes).to(device)
+
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     start_epoch, best_val_loss = load_checkpoint(
         model, optimizer, checkpoint_path, device
@@ -73,6 +80,7 @@ def train(
                 "epochs": num_epochs,
                 "lr": learning_rate,
                 "model": "DiffusionUNet",
+                "num_classes": num_classes,
             },
         )
 
@@ -83,6 +91,8 @@ def train(
             model, dataloader, optimizer, diffusion, device, use_wandb
         )
         val_loss = validate(model, val_loader, diffusion, device)
+
+        print(f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
 
         if use_wandb:
             log_epoch_metrics(epoch, train_loss, val_loss)
@@ -106,10 +116,8 @@ def train(
                     "epoch": epoch,
                 }
 
-        print(f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
-
-    # At the end of training
-    if use_wandb and best_model_state is not None:
+    # Finalize
+    if use_wandb and best_val_loss is not None:
         log_best_model(**best_model_state)
         wandb_run.finish()
 

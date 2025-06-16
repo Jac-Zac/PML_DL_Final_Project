@@ -22,7 +22,7 @@ class TimeEmbedding(nn.Module):
 
 
 class DoubleConv(nn.Module):
-    """Improved double convolution with better normalization."""
+    """Improved double convolution with FiLM conditioning."""
 
     def __init__(
         self, in_channels: int, out_channels: int, mid_channels: Optional[int] = None
@@ -34,17 +34,35 @@ class DoubleConv(nn.Module):
         groups = min(8, out_channels) if out_channels >= 8 else out_channels
         mid_groups = min(8, mid_channels) if mid_channels >= 8 else mid_channels
 
-        self.double_conv = nn.Sequential(
-            nn.Conv2d(in_channels, mid_channels, kernel_size=3, padding=1),
-            nn.GroupNorm(mid_groups, mid_channels),
-            nn.SiLU(),
-            nn.Conv2d(mid_channels, out_channels, kernel_size=3, padding=1),
-            nn.GroupNorm(groups, out_channels),
-            nn.SiLU(),
-        )
+        self.conv1 = nn.Conv2d(in_channels, mid_channels, kernel_size=3, padding=1)
+        self.norm1 = nn.GroupNorm(mid_groups, mid_channels)
+        self.act1 = nn.SiLU()
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.double_conv(x)
+        self.conv2 = nn.Conv2d(mid_channels, out_channels, kernel_size=3, padding=1)
+        self.norm2 = nn.GroupNorm(groups, out_channels)
+        self.act2 = nn.SiLU()
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        gamma1: Optional[torch.Tensor] = None,
+        beta1: Optional[torch.Tensor] = None,
+        gamma2: Optional[torch.Tensor] = None,
+        beta2: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        x = self.conv1(x)
+        x = self.norm1(x)
+        if gamma1 is not None and beta1 is not None:
+            x = gamma1[:, :, None, None] * x + beta1[:, :, None, None]
+        x = self.act1(x)
+
+        x = self.conv2(x)
+        x = self.norm2(x)
+        if gamma2 is not None and beta2 is not None:
+            x = gamma2[:, :, None, None] * x + beta2[:, :, None, None]
+        x = self.act2(x)
+
+        return x
 
 
 class DownBlock(nn.Module):
@@ -62,26 +80,35 @@ class DownBlock(nn.Module):
 
 
 class UpBlock(nn.Module):
-    """Modular upsampling block with time embedding."""
+    """Modular upsampling block with FiLM conditioning."""
 
     def __init__(
         self, in_channels: int, skip_channels: int, out_channels: int, time_emb_dim: int
     ):
         super().__init__()
-        total_in = in_channels + skip_channels + time_emb_dim
-        self.conv = DoubleConv(total_in, out_channels)
+        total_in = in_channels + skip_channels
+        self.double_conv = DoubleConv(total_in, out_channels)
+
+        # Predict FiLM params: 2 conv layers * (gamma + beta) * channels = 4 * out_channels
+        self.film_mlp = nn.Sequential(
+            nn.SiLU(),
+            nn.Linear(time_emb_dim, out_channels * 4),
+        )
 
     def forward(
         self, x: torch.Tensor, skip: torch.Tensor, time_emb: torch.Tensor
     ) -> torch.Tensor:
         x = F.interpolate(x, size=skip.shape[2:], mode="bilinear", align_corners=False)
-        t_emb = time_emb[:, :, None, None].expand(-1, -1, x.shape[2], x.shape[3])
-        x = torch.cat([x, skip, t_emb], dim=1)
-        return self.conv(x)
+        x = torch.cat([x, skip], dim=1)
+
+        film_params = self.film_mlp(time_emb)  # shape (B, out_channels*4)
+        gamma1, beta1, gamma2, beta2 = torch.chunk(film_params, 4, dim=1)
+
+        return self.double_conv(x, gamma1, beta1, gamma2, beta2)
 
 
 class DiffusionUNet(nn.Module):
-    """U-Net for diffusion or flow models, with optional class conditioning."""
+    """U-Net for diffusion or flow models, with optional class conditioning and FiLM."""
 
     def __init__(
         self,
@@ -151,7 +178,8 @@ class DiffusionUNet(nn.Module):
         # Add class embedding if conditioning
         if self.num_classes is not None and y is not None:
             y_emb = self.class_embed(y)
-            t_emb = t_emb + y_emb  # Could also use FiLM for more flexibility
+            # FiLM conditioning uses combined embedding here
+            t_emb = t_emb + y_emb
 
         # Encoder
         x = self.input_conv(x)

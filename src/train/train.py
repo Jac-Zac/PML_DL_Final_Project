@@ -1,11 +1,9 @@
 from typing import Optional
 
 import torch
-import torch.optim as optim
 from tqdm import tqdm
 
 from src.models.diffusion import Diffusion
-from src.models.unet import DiffusionUNet
 from src.utils.environment import load_checkpoint
 from src.utils.wandb import (
     initialize_wandb,
@@ -22,10 +20,10 @@ def train_one_epoch(model, dataloader, optimizer, diffusion, device, use_wandb):
     total_loss = 0.0
 
     for images, labels in tqdm(dataloader, desc="Training", leave=False):
-        images = images.to(device) * 2 - 1  # Normalize to [-1, 1]
+        images = images.to(device).mul_(2).sub_(1)  # In-place normalization to [-1, 1]
         y = labels.to(device)  # Class labels for conditioning
 
-        optimizer.zero_grad()
+        optimizer.zero_grad(set_to_none=True)  # Slightly more efficient memory-wise
         loss = diffusion.perform_training_step(model, images, y=y)
         loss.backward()
         optimizer.step()
@@ -36,7 +34,7 @@ def train_one_epoch(model, dataloader, optimizer, diffusion, device, use_wandb):
         if use_wandb:
             log_training_step(loss_val)
 
-    return total_loss / len(dataloader)
+    return total_loss / max(1, len(dataloader))  # avoid ZeroDivisionError
 
 
 def validate(model, val_loader, diffusion, device):
@@ -75,6 +73,14 @@ def train(
         optimizer_kwargs={"lr": learning_rate},
         model_kwargs=model_kwargs,
     )
+
+    if checkpoint_path:
+        best_model_state = {
+            "model": model,
+            "optimizer": optimizer,
+            "val_loss": best_val_loss,
+            "epoch": start_epoch,
+        }
 
     diffusion = Diffusion(img_size=28, device=device)
 

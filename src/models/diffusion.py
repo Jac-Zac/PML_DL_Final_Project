@@ -120,6 +120,7 @@ class Diffusion:
         t_sample_times: list[int] | None = None,
         channels: int = 1,
         log_intermediate: bool = False,
+        y: torch.Tensor | None = None,  # <- new argument for class labels
     ) -> torch.Tensor | list[torch.Tensor]:
         model.eval()
 
@@ -134,13 +135,17 @@ class Diffusion:
 
         for i, step in enumerate(steps):
             t = torch.full((1,), step, device=self.device, dtype=torch.long)
-            prev_step = steps[i + 1] if i < len(steps) - 1 else 0
 
-            eps_pred = model(x, t)
+            # Pass class label if available
+            if y is not None:
+                eps_pred = model(x, t, y)
+            else:
+                eps_pred = model(x, t)
+
             alpha_bar_t = self.alpha_bar[t].view(-1, 1, 1, 1)
             alpha_bar_prev = (
-                self.alpha_bar[prev_step].view(-1, 1, 1, 1)
-                if prev_step > 0
+                self.alpha_bar[steps[i + 1]].view(-1, 1, 1, 1)
+                if i < len(steps) - 1
                 else torch.ones_like(alpha_bar_t)
             )
 

@@ -2,6 +2,7 @@ import argparse
 import os
 
 import numpy as np
+import torch
 
 from src.models.diffusion import Diffusion
 from src.utils.environment import get_device, load_pretrained_model
@@ -34,6 +35,12 @@ def parse_args():
         default=50,
         help="Maximum number of diffusion timesteps (default: 50)",
     )
+    parser.add_argument(
+        "--num-classes",
+        type=int,
+        default=10,
+        help="Number of classes used for conditioning (default: 10)",
+    )
     return parser.parse_args()
 
 
@@ -41,27 +48,37 @@ def main():
     args = parse_args()
 
     device = get_device()
-    model = load_pretrained_model("unet", args.ckpt, device, time_emb_dim=128)
+    model = load_pretrained_model(
+        "unet",
+        args.ckpt,
+        device,
+        time_emb_dim=128,
+        num_classes=args.num_classes,
+    )
     diffusion = Diffusion(img_size=28, device=device)
 
     num_intermediate = 5
-
-    # Include timestep zero by extending linspace endpoint and count
     intermediate_steps = np.linspace(
         args.max_steps, 0, num_intermediate + 1, dtype=int
     ).tolist()
 
+    # Generate one class label per sample — e.g., labels 0, 1, ..., n-1 or sampled randomly
+    y = torch.arange(args.n) % args.num_classes
+    y = y.to(device)
+
     all_samples_grouped = []
 
     for i in range(args.n):
-        # This returns len(intermediate_steps)+1 images (intermediates + final)
+        class_y = y[i].unsqueeze(0)  # shape (1,)
         sample_steps = diffusion.sample_ddim(
-            model, t_sample_times=intermediate_steps, log_intermediate=True
+            model,
+            t_sample_times=intermediate_steps,
+            log_intermediate=True,
+            y=class_y,
         )
         all_samples_grouped.append(sample_steps)
-        print(f"Generated sample {i + 1}")
+        print(f"Generated sample {i + 1} with label {class_y.item()}")
 
-    # Flatten the list of lists: one list of all images
     flat_samples = [img for sample in all_samples_grouped for img in sample]
     steps = intermediate_steps
 

@@ -32,7 +32,7 @@ def parse_args():
     parser.add_argument(
         "--max-steps",
         type=int,
-        default=50,
+        default=1000,
         help="Maximum number of diffusion timesteps (default: 50)",
     )
     parser.add_argument(
@@ -68,18 +68,28 @@ def main():
 
     all_samples_grouped = []
 
-    for i in range(args.n):
-        class_y = y[i].unsqueeze(0)  # shape (1,)
-        sample_steps = diffusion.sample_ddim(
-            model,
-            t_sample_times=intermediate_steps,
-            log_intermediate=True,
-            y=class_y,
-        )
-        all_samples_grouped.append(sample_steps)
-        print(f"Generated sample {i + 1} with label {class_y.item()}")
+    # all_samples_grouped = diffusion.sample_ddim(
+    #     model,
+    #     t_sample_times=intermediate_steps,
+    #     log_intermediate=True,
+    #     y=y,  # full batch of labels
+    # )
 
-    flat_samples = [img for sample in all_samples_grouped for img in sample]
+    all_samples_grouped = diffusion.sample(
+        model,
+        t_sample_times=intermediate_steps,
+        log_intermediate=True,
+        y=y,  # full batch of labels
+    )
+    print(f"Generated {args.n} samples with labels {y.tolist()}")
+
+    stacked = torch.stack(all_samples_grouped)  # (T, B, C, H, W)
+    permuted = stacked.permute(1, 0, 2, 3, 4)  # (B, T, C, H, W)
+    flat_samples = permuted.reshape(-1, *permuted.shape[2:])  # (B*T, C, H, W)
+
+    # If your plot_image_grid expects a list, convert
+    flat_samples_list = [img.cpu() for img in flat_samples]
+
     steps = intermediate_steps
 
     os.makedirs(args.save_dir, exist_ok=True)

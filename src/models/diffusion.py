@@ -93,11 +93,15 @@ class Diffusion:
         y: torch.Tensor | None = None,  # conditioning label (optional)
     ) -> torch.Tensor | list[torch.Tensor]:
         model.eval()
-        x_t = torch.randn(1, channels, self.img_size, self.img_size, device=self.device)
+
+        batch_size = 1 if y is None else y.shape[0]
+        x_t = torch.randn(
+            batch_size, channels, self.img_size, self.img_size, device=self.device
+        )
         intermediates = []
 
         for i in reversed(range(0, self.noise_steps)):
-            t = torch.full((1,), i, device=self.device, dtype=torch.long)
+            t = torch.full((batch_size,), i, device=self.device, dtype=torch.long)
 
             # Pass conditioning y to sample_step as well
             x_t = self.sample_step(model, x_t, t, y)
@@ -109,8 +113,8 @@ class Diffusion:
         model.train()
 
         if log_intermediate and t_sample_times:
-            return intermediates + [final_image]
-        return final_image
+            return intermediates + [final_image]  # list of [B, C, H, W]
+        return final_image  # tensor [B, C, H, W]
 
     @torch.no_grad()
     def sample_ddim(
@@ -120,9 +124,10 @@ class Diffusion:
         t_sample_times: list[int] | None = None,
         channels: int = 1,
         log_intermediate: bool = False,
-        y: torch.Tensor | None = None,  # <- new argument for class labels
+        y: torch.Tensor | None = None,  # shape (batch,)
     ) -> torch.Tensor | list[torch.Tensor]:
         model.eval()
+        batch_size = 1 if y is None else y.shape[0]
 
         ddim_steps = (
             self.noise_steps if t_sample_times is None else max(t_sample_times) + 1
@@ -130,17 +135,15 @@ class Diffusion:
         step_indices = np.linspace(0, self.noise_steps - 1, ddim_steps, dtype=int)
         steps = list(reversed(step_indices.tolist()))
 
-        x = torch.randn(1, channels, self.img_size, self.img_size, device=self.device)
+        x = torch.randn(
+            batch_size, channels, self.img_size, self.img_size, device=self.device
+        )
         intermediates = []
 
         for i, step in enumerate(steps):
-            t = torch.full((1,), step, device=self.device, dtype=torch.long)
+            t = torch.full((batch_size,), step, device=self.device, dtype=torch.long)
 
-            # Pass class label if available
-            if y is not None:
-                eps_pred = model(x, t, y)
-            else:
-                eps_pred = model(x, t)
+            eps_pred = model(x, t, y=y) if y is not None else model(x, t)
 
             alpha_bar_t = self.alpha_bar[t].view(-1, 1, 1, 1)
             alpha_bar_prev = (
@@ -181,8 +184,8 @@ class Diffusion:
         model.train()
 
         if log_intermediate and t_sample_times:
-            return intermediates + [final_image]
-        return final_image
+            return intermediates + [final_image]  # List[Tensor] of [B, C, H, W]
+        return final_image  # Tensor [B, C, H, W]
 
     @staticmethod
     def transform_sampled_image(image: Tensor) -> Tensor:

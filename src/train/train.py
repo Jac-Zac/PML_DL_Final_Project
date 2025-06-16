@@ -1,4 +1,3 @@
-import os
 from typing import Optional
 
 import torch
@@ -7,12 +6,12 @@ from tqdm import tqdm
 
 from src.models.diffusion import Diffusion
 from src.models.unet import DiffusionUNet
+from src.utils.environment import load_checkpoint
 from src.utils.wandb import (
-    finish_wandb,
     initialize_wandb,
     log_best_model,
     log_epoch_metrics,
-    log_intermediate_steps,
+    log_sample_grid,
     log_training_step,
     save_and_log_model_checkpoint,
 )
@@ -51,33 +50,6 @@ def validate(model, val_loader, diffusion, device):
     return total_loss / len(val_loader)
 
 
-def log_samples(model, diffusion):
-    samples_steps = []
-    with torch.no_grad():
-        for _ in range(4):
-            steps = diffusion.sample(
-                model,
-                t_sample_times=[1000, 800, 600, 400, 200, 0],
-                log_intermediate=True,
-            )
-            samples_steps.append(torch.cat(steps, dim=0))
-    return samples_steps
-
-
-def load_checkpoint(model, optimizer, checkpoint_path, device):
-    if not checkpoint_path or not os.path.exists(checkpoint_path):
-        return 1, float("inf")
-
-    print(f"Loading checkpoint from {checkpoint_path}")
-    checkpoint = torch.load(checkpoint_path, map_location=device)
-    model.load_state_dict(checkpoint["model_state_dict"])
-    optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-    epoch = checkpoint.get("epoch", 1) + 1
-    best_val_loss = checkpoint.get("best_val_loss", float("inf"))
-
-    return epoch, best_val_loss
-
-
 def train(
     num_epochs: int,
     device: torch.device,
@@ -95,7 +67,7 @@ def train(
     diffusion = Diffusion(img_size=28, device=device)
 
     if use_wandb:
-        initialize_wandb(
+        wandb_run = initialize_wandb(
             project="diffusion-project",
             config={
                 "epochs": num_epochs,
@@ -114,7 +86,7 @@ def train(
 
         if use_wandb:
             log_epoch_metrics(epoch, train_loss, val_loss)
-            log_intermediate_steps(log_samples(model, diffusion))
+            log_sample_grid(model, diffusion, num_samples=5, num_timesteps=6)
 
             save_and_log_model_checkpoint(
                 model=model,
@@ -139,7 +111,7 @@ def train(
     # At the end of training
     if use_wandb and best_model_state is not None:
         log_best_model(**best_model_state)
-        finish_wandb()
+        wandb_run.finish()
 
     print("\nTraining complete.")
     return model

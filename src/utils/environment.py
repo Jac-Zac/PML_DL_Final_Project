@@ -1,3 +1,4 @@
+import logging
 import os
 import random
 
@@ -5,6 +6,8 @@ import numpy as np
 import torch
 
 from src.models.unet import DiffusionUNet
+
+logger = logging.getLogger(__name__)
 
 
 def set_seed(seed):
@@ -36,37 +39,49 @@ def get_device() -> torch.device:
     return device
 
 
+def load_checkpoint(model, optimizer, checkpoint_path, device):
+    if not checkpoint_path or not os.path.exists(checkpoint_path):
+        logger.warning(f"Checkpoint path not found: {checkpoint_path}")
+        return 1, float("inf")
+
+    logger.info(f"🔄 Loading checkpoint from {checkpoint_path}")
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+
+    model.load_state_dict(checkpoint["model_state_dict"])
+    optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+
+    epoch = checkpoint.get("epoch", 0) + 1
+    best_val_loss = checkpoint.get("best_val_loss", float("inf"))
+
+    logger.info(f"✅ Checkpoint loaded. Resuming from epoch {epoch}")
+    return epoch, best_val_loss
+
+
 def load_pretrained_model(model_name, ckpt_path, device, **kwargs):
-    # Dictionary mapping model names to their constructors
-    model_switch = {
+    model_registry = {
         "unet": DiffusionUNet,
-        # Add other models here if needed
+        # Extend here with more models
     }
 
-    # Get the model constructor from the dictionary, or raise error if unknown
-    model_cls = model_switch.get(model_name)
+    model_cls = model_registry.get(model_name)
     if model_cls is None:
-        raise ValueError(f"Unknown model name: {model_name}")
+        raise ValueError(f"❌ Unknown model name: {model_name}")
 
-    # Instantiate the model with kwargs and move to device
     model = model_cls(**kwargs).to(device)
 
-    # Load checkpoint if path is valid
-    if ckpt_path is not None and os.path.exists(ckpt_path):
-        state_dict = torch.load(ckpt_path, map_location=device)
+    if not ckpt_path or not os.path.exists(ckpt_path):
+        raise FileNotFoundError(f"❌ Checkpoint not found: {ckpt_path}")
 
-        # Check if checkpoint contains full model state dict or raw state dict
-        if "model_state_dict" in state_dict:
-            state_dict = state_dict["model_state_dict"]
+    logger.info(f"🔄 Loading model weights from {ckpt_path}")
+    checkpoint = torch.load(ckpt_path, map_location=device)
 
-        missing, unexpected = model.load_state_dict(state_dict, strict=False)
+    state_dict = checkpoint.get("model_state_dict", checkpoint)
+    missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
 
-        if missing:
-            print(f"⚠️ Missing keys in state_dict: {missing}")
-        if unexpected:
-            print(f"⚠️ Unexpected keys in state_dict: {unexpected}")
-        print("✅ Loaded model weights from:", ckpt_path)
-    else:
-        raise FileNotFoundError(f"Checkpoint not found: {ckpt_path}")
+    if missing_keys:
+        logger.warning(f"⚠️ Missing keys in state_dict: {missing_keys}")
+    if unexpected_keys:
+        logger.warning(f"⚠️ Unexpected keys in state_dict: {unexpected_keys}")
 
+    logger.info("✅ Model weights loaded successfully")
     return model

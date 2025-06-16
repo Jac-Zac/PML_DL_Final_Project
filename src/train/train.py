@@ -62,15 +62,20 @@ def train(
     learning_rate: float = 1e-3,
     use_wandb: bool = False,
     checkpoint_path: Optional[str] = None,
+    model_name: str = "unet",  # new param to specify model
+    model_kwargs: dict = None,  # kwargs for model init
 ):
-    # Instantiate model with the number of classes in your dataset (e.g. 10 for MNIST)
-    num_classes = len(dataloader.dataset.classes)
-    model = DiffusionUNet(num_classes=num_classes).to(device)
+    model_kwargs = model_kwargs or {}
 
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-    start_epoch, best_val_loss = load_checkpoint(
-        model, optimizer, checkpoint_path, device
+    model, optimizer, start_epoch, best_val_loss = load_checkpoint(
+        model_name=model_name,
+        checkpoint_path=checkpoint_path,
+        device=device,
+        optimizer_class=torch.optim.Adam,
+        optimizer_kwargs={"lr": learning_rate},
+        model_kwargs=model_kwargs,
     )
+
     diffusion = Diffusion(img_size=28, device=device)
 
     if use_wandb:
@@ -79,8 +84,8 @@ def train(
             config={
                 "epochs": num_epochs,
                 "lr": learning_rate,
-                "model": "DiffusionUNet",
-                "num_classes": num_classes,
+                "model": model_name,
+                "num_classes": model_kwargs["num_classes"],
             },
         )
 

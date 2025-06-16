@@ -97,48 +97,33 @@ def log_sample_grid(
         max_timesteps, 0, steps=num_timesteps, dtype=torch.int32
     ).tolist()
 
-    samples_steps = []
-    with torch.no_grad():
-        for class_label in range(num_samples):
-            y = torch.tensor(
-                [class_label], device=diffusion.device
-            )  # conditioning label
+    # Create batch of conditioning labels [0, 1, 2, ..., num_samples-1]
+    y = torch.arange(num_samples, device=diffusion.device)
 
-            # Assuming diffusion.sample can accept conditioning label y (you'll need to modify diffusion.sample too)
-            steps = diffusion.sample(
-                model,
-                t_sample_times=t_sample_times,
-                log_intermediate=True,
-                y=y,  # pass conditioning
-            )
-            # Concatenate all steps (timestep images) along batch dim (time)
-            samples_steps.append(torch.cat(steps, dim=0))
+    # Sample all at once in batch
+    all_samples_grouped = diffusion.sample(
+        model,
+        t_sample_times=t_sample_times,
+        log_intermediate=True,
+        y=y,  # pass batch of labels
+    )
+    # all_samples_grouped shape: (T, B, C, H, W)
 
-    # Stack samples: shape [num_samples, num_timesteps * C * H * W]
-    stacked = torch.stack(samples_steps)
+    # Rearrange to (B, T, C, H, W)
+    stacked = torch.stack(all_samples_grouped)  # (T, B, C, H, W)
+    permuted = stacked.permute(1, 0, 2, 3, 4)  # (B, T, C, H, W)
 
-    num_samples = len(samples_steps)
-    num_timesteps = samples_steps[0].shape[0]  # number of timesteps per sample
-    C, H, W = samples_steps[0].shape[1:]  # channels, height, width
-
-    # Reshape to [num_samples, num_timesteps, C, H, W]
-    stacked = stacked.view(num_samples, num_timesteps, C, H, W)
-
-    # We want to create a grid where each row is a sample and each column a timestep
-    # So for each sample, concatenate images from all timesteps horizontally
+    # For each sample in batch, create a horizontal grid of its timesteps
     rows = []
     for sample_idx in range(num_samples):
-        # Take all timestep images for this sample: shape (num_timesteps, C, H, W)
-        sample_images = stacked[sample_idx]
-
-        # Make grid horizontally (nrow=num_timesteps) for this sample
+        sample_images = permuted[sample_idx]  # (T, C, H, W)
         row_grid = vutils.make_grid(
             sample_images, nrow=num_timesteps, normalize=True, value_range=(-1, 1)
         )
         rows.append(row_grid)
 
-    # Stack all sample rows vertically (dim=1 for height)
-    final_grid = torch.cat(rows, dim=1)  # concat on height
+    # Stack rows vertically
+    final_grid = torch.cat(rows, dim=1)
 
     # Log to wandb
     wandb.log(

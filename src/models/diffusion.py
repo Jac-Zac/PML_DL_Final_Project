@@ -90,8 +90,8 @@ class Diffusion:
         t_sample_times: list[int] | None = None,
         channels: int = 1,
         log_intermediate: bool = False,
-        y: torch.Tensor | None = None,  # conditioning label (optional)
-    ) -> torch.Tensor | list[torch.Tensor]:
+        y: torch.Tensor | None = None,
+    ) -> list[torch.Tensor]:
         model.eval()
 
         batch_size = 1 if y is None else y.shape[0]
@@ -102,8 +102,6 @@ class Diffusion:
 
         for i in reversed(range(0, self.noise_steps)):
             t = torch.full((batch_size,), i, device=self.device, dtype=torch.long)
-
-            # Pass conditioning y to sample_step as well
             x_t = self.sample_step(model, x_t, t, y)
 
             if log_intermediate and t_sample_times and i in t_sample_times:
@@ -112,9 +110,7 @@ class Diffusion:
         final_image = self.transform_sampled_image(x_t.clone())
         model.train()
 
-        if log_intermediate and t_sample_times:
-            return intermediates + [final_image]  # list of [B, C, H, W]
-        return final_image  # tensor [B, C, H, W]
+        return intermediates + [final_image]
 
     @torch.no_grad()
     def sample_ddim(

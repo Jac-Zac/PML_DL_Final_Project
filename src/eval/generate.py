@@ -36,10 +36,10 @@ def parse_args():
         help="Maximum number of diffusion timesteps (default: 50)",
     )
     parser.add_argument(
-        "--num-classes",
-        type=int,
-        default=10,
-        help="Number of classes used for conditioning (default: 10)",
+        "--model-name",
+        type=str,
+        default="unet",
+        help="Model name to use from registry",
     )
     return parser.parse_args()
 
@@ -48,13 +48,21 @@ def main():
     args = parse_args()
 
     device = get_device()
+    # HACK: Hard coded number of classes for now
+    num_classes = 10
+
+    model_kwargs = {
+        "num_classes": num_classes,
+        "time_emb_dim": 128,  # you can make this a CLI arg if needed
+    }
+
     model = load_pretrained_model(
-        "unet",
-        args.ckpt,
-        device,
-        time_emb_dim=128,
-        num_classes=args.num_classes,
+        model_name=args.model_name,
+        ckpt_path=args.ckpt,
+        device=device,
+        model_kwargs=model_kwargs,
     )
+
     diffusion = Diffusion(img_size=28, device=device)
 
     num_intermediate = 5
@@ -62,40 +70,28 @@ def main():
         args.max_steps, 0, num_intermediate + 1, dtype=int
     ).tolist()
 
-    # Generate one class label per sample — e.g., labels 0, 1, ..., n-1 or sampled randomly
-    y = torch.arange(args.n) % args.num_classes
+    # Generate labels: 0, 1, ..., n-1 modulo num_classes
+    y = torch.arange(args.n) % num_classes
     y = y.to(device)
-
-    all_samples_grouped = []
-
-    # all_samples_grouped = diffusion.sample_ddim(
-    #     model,
-    #     t_sample_times=intermediate_steps,
-    #     log_intermediate=True,
-    #     y=y,  # full batch of labels
-    # )
 
     all_samples_grouped = diffusion.sample(
         model,
         t_sample_times=intermediate_steps,
         log_intermediate=True,
-        y=y,  # full batch of labels
+        y=y,  # conditioning labels batch
     )
     print(f"Generated {args.n} samples with labels {y.tolist()}")
-
     stacked = torch.stack(all_samples_grouped)  # (T, B, C, H, W)
+
     permuted = stacked.permute(1, 0, 2, 3, 4)  # (B, T, C, H, W)
     flat_samples = permuted.reshape(-1, *permuted.shape[2:])  # (B*T, C, H, W)
-
-    # If your plot_image_grid expects a list, convert
-    flat_samples_list = [img.cpu() for img in flat_samples]
-
-    steps = intermediate_steps
 
     os.makedirs(args.save_dir, exist_ok=True)
     out_path = os.path.join(args.save_dir, "all_samples_grid.png")
 
-    plot_image_grid(flat_samples, out_path, num_samples=args.n, timesteps=steps)
+    plot_image_grid(
+        flat_samples, out_path, num_samples=args.n, timesteps=intermediate_steps
+    )
 
 
 if __name__ == "__main__":

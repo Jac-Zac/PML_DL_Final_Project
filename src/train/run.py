@@ -15,6 +15,10 @@ def parse_args():
     parser.add_argument(
         "--checkpoint", type=str, default=None, help="Path to checkpoint"
     )
+    parser.add_argument(
+        "--model-name", type=str, default="unet", help="Model name to use from registry"
+    )
+    # Optional: you could add JSON string argument for model kwargs if you want to get fancy
     return parser.parse_args()
 
 
@@ -24,7 +28,16 @@ def main():
     device = get_device()
     os.makedirs("checkpoints", exist_ok=True)
 
-    train_loader, val_loader = get_dataloaders(batch_size=args.batch_size)
+    train_loader, val_loader = get_dataloaders(
+        # batch_size=args.batch_size, num_elements=100
+        batch_size=args.batch_size
+    )
+
+    # Get number of classes from dataset and add to model_kwargs ...
+    # HACK: We keep it as 10 for now hard coded
+    num_classes = 10
+    model_kwargs = {"num_classes": num_classes}
+
     _ = train(
         num_epochs=args.epochs,
         device=device,
@@ -33,6 +46,8 @@ def main():
         learning_rate=args.lr,
         use_wandb=True,
         checkpoint_path=args.checkpoint,
+        model_name=args.model_name,
+        model_kwargs=model_kwargs,
     )
 
 

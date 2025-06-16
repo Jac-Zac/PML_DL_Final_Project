@@ -4,7 +4,6 @@ import random
 import numpy as np
 import torch
 
-from src.models.transformer_net import DiffusionUViT
 from src.models.unet import DiffusionUNet
 
 
@@ -41,7 +40,6 @@ def load_pretrained_model(model_name, ckpt_path, device, **kwargs):
     # Dictionary mapping model names to their constructors
     model_switch = {
         "unet": DiffusionUNet,
-        "uvit": DiffusionUViT,
         # Add other models here if needed
     }
 

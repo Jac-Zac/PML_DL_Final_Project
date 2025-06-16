@@ -127,16 +127,18 @@ def train(
 
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
-                log_best_model(
-                    model=model,
-                    optimizer=optimizer,
-                    val_loss=best_val_loss,
-                    epoch=epoch,
-                )
+                best_model_state = {
+                    "model": model,
+                    "optimizer": optimizer,
+                    "val_loss": best_val_loss,
+                    "epoch": epoch,
+                }
 
         print(f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
 
-    if use_wandb:
+    # At the end of training
+    if use_wandb and best_model_state is not None:
+        log_best_model(**best_model_state)
         finish_wandb()
 
     print("\nTraining complete.")

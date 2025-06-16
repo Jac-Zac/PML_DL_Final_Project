@@ -81,19 +81,21 @@ class UpBlock(nn.Module):
 
 
 class DiffusionUNet(nn.Module):
-    """Modular U-Net that works well for MNIST by default but is configurable."""
+    """U-Net for diffusion or flow models, with optional class conditioning."""
 
     def __init__(
         self,
         in_channels: int = 1,
         out_channels: int = 1,
         base_channels: int = 64,
-        channel_multipliers: List[int] = [1, 2, 4],  # Fixed for MNIST compatibility
+        channel_multipliers: List[int] = [1, 2, 4],
         time_emb_dim: int = 128,
         timesteps: int = 1000,
+        num_classes: Optional[int] = None,  # Optional class conditioning
     ):
         super().__init__()
         self.timesteps = timesteps
+        self.num_classes = num_classes
 
         # Time embedding
         self.time_embed = nn.Sequential(
@@ -103,6 +105,10 @@ class DiffusionUNet(nn.Module):
             nn.Linear(time_emb_dim, time_emb_dim),
         )
 
+        # Optional class embedding
+        if num_classes is not None:
+            self.class_embed = nn.Embedding(num_classes, time_emb_dim)
+
         # Calculate encoder channel sizes
         self.channels = [base_channels * m for m in channel_multipliers]
 
@@ -111,7 +117,7 @@ class DiffusionUNet(nn.Module):
             in_channels, self.channels[0], kernel_size=3, padding=1
         )
 
-        # Encoder blocks
+        # Encoder
         self.down_blocks = nn.ModuleList()
         for i in range(len(self.channels) - 1):
             self.down_blocks.append(DownBlock(self.channels[i], self.channels[i + 1]))
@@ -119,35 +125,48 @@ class DiffusionUNet(nn.Module):
         # Bottleneck
         self.bottleneck = DoubleConv(self.channels[-1], self.channels[-1])
 
-        # Decoder blocks - FIXED: Use actual skip connection channels
+        # Decoder
         self.up_blocks = nn.ModuleList()
         reversed_channels = list(reversed(self.channels))
-        skip_channels = list(
-            reversed(self.channels[1:])
-        )  # Actual skip connection channels
+        skip_channels = list(reversed(self.channels[1:]))
 
         for i in range(len(skip_channels)):
             in_ch = reversed_channels[i]
-            skip_ch = skip_channels[i]  # Actual channel size from encoder
+            skip_ch = skip_channels[i]
             out_ch = reversed_channels[i + 1]
             self.up_blocks.append(UpBlock(in_ch, skip_ch, out_ch, time_emb_dim))
 
-        # Output projection
+        # Final output projection (acts like linear layer)
         self.output_conv = nn.Conv2d(self.channels[0], out_channels, kernel_size=1)
 
-    def forward(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        x: torch.Tensor,
+        t: torch.Tensor,
+        y: Optional[torch.Tensor] = None,  # Optional class label
+    ) -> torch.Tensor:
+        # Time embedding
         t_emb = self.time_embed(t)
-        x = self.input_conv(x)
 
+        # Add class embedding if conditioning
+        if self.num_classes is not None and y is not None:
+            y_emb = self.class_embed(y)
+            t_emb = t_emb + y_emb  # Could also use FiLM for more flexibility
+
+        # Encoder
+        x = self.input_conv(x)
         skips = []
         for down_block in self.down_blocks:
             x, skip = down_block(x)
             skips.append(skip)
 
+        # Bottleneck
         x = self.bottleneck(x)
 
+        # Decoder
         for up_block in self.up_blocks:
             skip = skips.pop()
             x = up_block(x, skip, t_emb)
 
+        # Final 1×1 linear layer
         return self.output_conv(x)

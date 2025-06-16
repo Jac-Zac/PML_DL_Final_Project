@@ -17,6 +17,18 @@
 
 ---
 
+## 2. 📗 **DDIM: Denoising Diffusion Implicit Models**
+
+- **Process**:
+
+  - A deterministic variant of DDPM that uses non-Markovian diffusion
+  - Enables faster sampling by skipping some timesteps while maintaining sample quality
+  - Interpolates between latent representations, allowing smooth latent space manipulation
+
+- **Key Advantage**: Much faster generation with fewer steps compared to DDPM, without retraining the model
+
+---
+
 ## 2. 🧠 **Stable Diffusion v1 – Latent Diffusion**
 
 - **Architecture**: VAE encoder → U-Net diffusion in latent space → VAE decoder
@@ -93,59 +105,13 @@
 
 ---
 
-## 8. 🚀 **Stable Diffusion 3.5 – Refinement of v3**
-
-- **Architecture**: Enhanced MMDiT-X (multi-resolution Transformer)
-- **Key Innovation**: **Query-Key Normalization (QKNorm)** for more stable attention mechanisms
-- **Improvements**:
-  - Better image quality and coherence
-  - More stable training process
-  - Enhanced text-image alignment
-- **Still uses**: VAE latent space approach
-
----
-
-## 9. ⚡ **Flux 1.1 Pro – Black Forest Labs**
-
-- **Size**: 12B parameter transformer-based model
-- **Architecture**:
-
-  - Flow Matching with continuous normalizing flows
-  - **Rotary positional embeddings** for better spatial understanding
-  - **Parallel attention mechanisms** for speed optimization
-  - Hybrid transformer-diffusion approach
-
-- **Performance**: Extremely fast inference with photorealistic outputs
-- **Training**: Uses advanced distillation techniques for efficiency
-
----
-
-## 10. 🧠 **Imagen 3 & 4 – Google's Approach**
-
-### Imagen 3:
-
-- **Text Encoder**: T5-XXL language model for superior text understanding
-- **Architecture**: Cascaded diffusion with super-resolution stages
-- **Strength**: Exceptional text rendering and complex scene composition
-
-### Imagen 4:
-
-- **Platforms**: Integrated into Gemini, ImageFX, Vertex AI
-- **Improvements**: Enhanced language-image alignment and reasoning
-- **Use Cases**: Professional-grade text-to-image with complex instructions
-
----
-
-## 11. ⚙️ **Sampling Speed Optimization**
+## 8. ⚙️ **Sampling Speed Optimization**
 
 | Method                       | Steps Needed | Description                   | Trade-offs                    |
 | ---------------------------- | ------------ | ----------------------------- | ----------------------------- |
 | **Original DDPM**            | ~1000+       | Slow but highest quality      | Impractical for real-time use |
 | **DDIM**                     | ~20-50       | Deterministic sampling        | Faster, slight quality loss   |
 | **Progressive Distillation** | ~4-8         | Model distilled to skip steps | Requires retraining           |
-| **LCM (Latent Consistency)** | ~2-4         | Consistency model approach    | Very fast, good quality       |
-| **SDXL Turbo**               | ~1-4         | Adversarial distillation      | Real-time generation          |
-| **Lightning Models**         | ~2-8         | Progressive distillation      | Balanced speed/quality        |
 
 ---
 
@@ -157,59 +123,30 @@
 - **Cosine**: Better perceptual quality
 - **v-parameterization**: Improved training stability
 
-### Data Augmentation:
-
-- Aspect ratio bucketing for varied resolutions
-- Text dropout for better unconditional generation
-- Multi-resolution training
-
 ### Loss Functions:
 
 - **MSE**: Standard choice
 - **L1**: Sometimes better for sharp details
-- **Perceptual**: Using pretrained networks
-- **Adversarial**: For enhanced realism
 
 ---
 
 ## 📌 **Model Comparison Summary**
 
-| Model          | Architecture  | Latent Space  | Key Innovation               | Best For               |
-| -------------- | ------------- | ------------- | ---------------------------- | ---------------------- |
-| **DDPM**       | U-Net         | No            | Original diffusion           | Research/Understanding |
-| **SD v1**      | U-Net + VAE   | Yes (64×64×4) | Latent diffusion             | General use            |
-| **SD v2**      | U-Net + VAE   | Yes           | Better text encoder          | Improved quality       |
-| **SD v3**      | MMDiT + VAE   | Yes           | Flow matching + transformers | Text accuracy          |
-| **SD 3.5**     | MMDiT-X + VAE | Yes           | QK normalization             | Stability              |
-| **Flux 1.1**   | Transformer   | Yes           | Hybrid architecture          | Speed + quality        |
-| **Imagen 3/4** | Cascaded      | Yes           | T5 text encoder              | Complex scenes         |
+| Model        | Architecture  | Latent Space  | Key Innovation               | Best For               |
+| ------------ | ------------- | ------------- | ---------------------------- | ---------------------- |
+| **DDPM**     | U-Net         | No            | Original diffusion           | Research/Understanding |
+| **SD v1**    | U-Net + VAE   | Yes (64×64×4) | Latent diffusion             | General use            |
+| **SD v2**    | U-Net + VAE   | Yes           | Better text encoder          | Improved quality       |
+| **SD v3**    | MMDiT + VAE   | Yes           | Flow matching + transformers | Text accuracy          |
+| **SD 3.5**   | MMDiT-X + VAE | Yes           | QK normalization             | Stability              |
+| **Flux 1.1** | Transformer   | Yes           | Hybrid architecture          | Speed + quality        |
 
 ---
-
-## ✅ **Practical Tips & Tricks**
-
-### Training:
-
-- Start with pretrained weights when possible
-- Use mixed precision (fp16/bf16) for memory efficiency
-- Implement gradient checkpointing for large models
-- Monitor FID and CLIP scores for quality assessment
 
 ### Sampling:
 
 - Use classifier-free guidance (CFG) scale 7-15 for best results
 - Try different samplers (DPM++, Euler, Heun) for speed/quality balance
-- Negative prompts help avoid unwanted content
 - Seed control ensures reproducible results
-
-### Hardware:
-
-- 8GB VRAM minimum for SD1.5, 12GB+ recommended for SDXL
-- Batch size of 1 usually optimal for inference
-- Use attention slicing/chunking for memory optimization
-
----
-
-_This overview reflects the current state of diffusion models as of 2024/2025, with corrections to architectural details and latest developments._
 
 [Stable diffusion notes](https://www.youtube.com/watch?v=n233GPgOHJg)

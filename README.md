@@ -2,10 +2,19 @@
 
 # TODO:
 
-- Check if the sampling is working correctly
 - Modify the model to have a linear layer at the end
-- Modify the validation to use the fast sampling instead
+- Modify the validation to use the fast sampling instead (if you want). We can avoid fast sampling
 - Try to do LLLA after you have changed the last layer to be linear
+- Implement Flow Matching instead of Diffiusion (using still the same Unet), We should be able to swap with a model registry
+
+### Additional results
+
+Write some code inspired by the paper to use a better pre-trained model to showcase some nice results
+
+# NOTE:
+
+> [!WARNING]
+> THE rest of the README is just GPT stuff for the future
 
 ## 📘 Project Overview
 

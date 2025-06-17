@@ -15,6 +15,44 @@
 - [ ] Flow Matching
 - [ ] LLM model
 
+## How to run the project:
+
+- Create the virtual environment
+
+```bash
+ python3.12 -m venv .venv
+```
+
+- Activate the environment
+
+```bash
+source .venv/bin/activate
+```
+
+- Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+- Train the model
+  > From the root of the directory
+
+The following is just an example to get all options you can run: `python -m src.train.run --help`
+
+```bash
+python -m src.train.run --epochs 4 --method=diffusion
+```
+
+This will log results to wanbd if enabled. Keep in mind that you have to add your api key inside a `.env` file in the root of the repo. You can take inspiration from `.env_sample`
+
+- You can also run a model to generate images:
+  > The following is an example which use the best_model checkpoint to generate images inside the checkpoint directory by default
+
+```bash
+python -m src.eval.generate --n 10
+```
+
 ### Additional results
 
 Write some code inspired by the paper to use a better pre-trained model to showcase some nice results
@@ -65,16 +103,18 @@ We ran extensive experiments on synthetic and real datasets:
 ## 📁 Repository Structure
 
 ```
+
 BayesDiff-Project/
-├── data/                     # Sample synthetic and real datasets
-├── notebooks/               # Jupyter notebooks for analysis and visualization
-├── src/                     # Core implementation of the BayesDiff model
-│   ├── model.py             # Model definition
-│   ├── inference.py         # Inference algorithms
-│   └── utils.py             # Helper functions
-├── results/                 # Experimental results and plots
-├── report/                  # Final written report (PDF)
-└── README.md                # Project documentation
+├── data/ # Sample synthetic and real datasets
+├── notebooks/ # Jupyter notebooks for analysis and visualization
+├── src/ # Core implementation of the BayesDiff model
+│ ├── model.py # Model definition
+│ ├── inference.py # Inference algorithms
+│ └── utils.py # Helper functions
+├── results/ # Experimental results and plots
+├── report/ # Final written report (PDF)
+└── README.md # Project documentation
+
 ```
 
 ## 🔍 Key Results

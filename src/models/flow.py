@@ -1,123 +1,76 @@
+from typing import Optional
+
 import torch
 from torch import Tensor, nn
 
 
 class FlowMatching:
-    """
-    Implements a flow matching training and sampling class similar in
-    style to your Diffusion class.
-    """
-
-    def __init__(
-        self,
-        img_size: int = 64,
-        device: torch.device = torch.device("cpu"),
-    ):
+    def __init__(self, img_size: int = 64, device: torch.device = torch.device("cpu")):
         self.img_size = img_size
         self.device = device
 
     def _sample_timesteps(self, batch_size: int) -> Tensor:
-        # Sample continuous timesteps uniformly in [0, 1]
         return torch.rand(batch_size, device=self.device)
-
-    def _interpolate(self, x0: Tensor, x1: Tensor, t: Tensor) -> Tensor:
-        # Linear interpolation x(t) = (1 - t)*x0 + t*x1
-        t = t.view(-1, 1, 1, 1)  # broadcast over spatial dims
-        return (1 - t) * x0 + t * x1
-
-    def _velocity(self, x0: Tensor, x1: Tensor) -> Tensor:
-        # Velocity of linear path = (x1 - x0), independent of t
-        return x1 - x0
-
-    @staticmethod
-    def loss_simple(v_true: Tensor, v_pred: Tensor) -> Tensor:
-        return nn.functional.mse_loss(v_pred, v_true)
 
     def perform_training_step(
         self,
         model: nn.Module,
-        x0: Tensor,
-        x1: Tensor,
-        y: Tensor | None = None,
+        x0: Tensor,  # noise ~ N(0,I)
+        x1: Tensor,  # data in [-1,1]
+        y: Optional[Tensor] = None,
     ) -> Tensor:
-        """
-        Training step:
-        - sample t ~ Uniform[0,1]
-        - compute interpolated x(t)
-        - compute true velocity (x1 - x0)
-        - predict velocity from model(x(t), t, y)
-        - compute MSE loss
-        """
-        batch_size = x0.size(0)
-        t = self._sample_timesteps(batch_size)
-        x_t = self._interpolate(x0, x1, t)
-        v_true = self._velocity(x0, x1)
+        B = x0.size(0)
+        t = self._sample_timesteps(B)
+        t4 = t.view(-1, 1, 1, 1)
+        x_t = (1 - t4) * x0 + t4 * x1  # linear OT path
 
-        # model expects t scaled to [0, timesteps] int or normalized float?
-        # Your UNet takes float t for embedding, so float in [0,1] is fine
-        v_pred = model(x_t, t, y=y)
+        # True velocity & normalization
+        u = x1 - x0
+        norm = u.flatten(1).norm(dim=1, keepdim=True).view(-1, 1, 1, 1).clamp(min=1e-6)
+        u = u / norm
 
-        return self.loss_simple(v_true, v_pred)
+        v = model(x_t, t, y=y)
+        assert v.shape == u.shape
+
+        # Time-weighted MSE loss
+        w = t4.pow(2)
+        return (w * (v - u).pow(2)).mean()
 
     @torch.no_grad()
     def sample(
         self,
         model: nn.Module,
-        x_init: Tensor | None = None,
-        steps: int = 1000,
-        y: Tensor | None = None,
+        x_init: Optional[Tensor] = None,
+        steps: int = 100,
+        y: Optional[Tensor] = None,
         log_intermediate: bool = False,
-        t_sample_times: list[int] | None = None,
+        t_sample_times: Optional[list[int]] = None,
     ) -> list[Tensor]:
-        """
-        Generate samples by integrating backward in time from x1 to x0.
-        Since flow matching uses velocity fields v(x,t), use Euler integration:
-
-        x_{t-dt} = x_t - v_pred(x_t, t)*dt
-
-        Args:
-            model: velocity field predictor
-            x_init: starting point at t=1, if None, sample noise ~ N(0,1)
-            steps: number of integration steps
-            y: optional conditioning labels
-            log_intermediate: whether to log intermediate images
-            t_sample_times: indices of steps at which to log intermediate images
-        Returns:
-            list of sampled images (including final)
-        """
-
         model.eval()
+        B = (
+            y.shape[0]
+            if y is not None
+            else (x_init.shape[0] if x_init is not None else 1)
+        )
+        C = x_init.shape[1] if x_init is not None else 1
+        x_t = (
+            x_init.to(self.device)
+            if x_init is not None
+            else torch.randn(B, C, self.img_size, self.img_size, device=self.device)
+        )
 
-        batch_size = 1 if y is None else y.shape[0]
-        channels = x_init.shape[1] if x_init is not None else 1
-
-        if x_init is None:
-            x_t = torch.randn(
-                batch_size, channels, self.img_size, self.img_size, device=self.device
-            )
-        else:
-            x_t = x_init.to(self.device)
-
-        intermediates = []
-
+        results = []
         dt = 1.0 / steps
-        times = torch.linspace(1, 0, steps + 1, device=self.device)  # from 1 to 0
-
         for i in range(steps):
-            t = times[i].expand(batch_size)  # current time t in [0,1]
+            t = torch.full((B,), i / steps, device=self.device)
             v = model(x_t, t, y=y)
-            x_t = x_t - v * dt  # Euler step backward in time
-
+            x_t = x_t + v * dt
             if log_intermediate and t_sample_times and i in t_sample_times:
-                intermediates.append(self.transform_sampled_image(x_t.clone()))
+                results.append(self.transform_sampled_image(x_t.clone()))
 
-        final_image = self.transform_sampled_image(x_t.clone())
-
-        model.train()
-
-        return intermediates + [final_image]
+        results.append(self.transform_sampled_image(x_t))
+        return results
 
     @staticmethod
     def transform_sampled_image(image: Tensor) -> Tensor:
-        # Assume images are roughly in [-1, 1] range
         return (image.clamp(-1, 1) + 1) / 2

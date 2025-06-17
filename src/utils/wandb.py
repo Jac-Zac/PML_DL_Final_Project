@@ -17,8 +17,14 @@ def initialize_wandb(project="diffusion-project", run_name=None, config=None):
 
     # Get the W&B API key from environment variable
     wandb_api_key = os.getenv("WANDB_API_KEY")
+
+    # If the API key is not set, ask the user to input it manually
     if wandb_api_key is None:
-        raise ValueError("WANDB_API_KEY environment variable not set")
+        wandb_api_key = input(
+            "WANDB_API_KEY environment variable not set. Please enter your WandB API key: "
+        ).strip()
+        if not wandb_api_key:
+            raise ValueError("WandB API key is required to proceed.")
 
     # Login using the API key
     wandb.login(key=wandb_api_key)

@@ -18,6 +18,13 @@ def parse_args():
     parser.add_argument(
         "--model-name", type=str, default="unet", help="Model name to use from registry"
     )
+    parser.add_argument(
+        "--method",
+        type=str,
+        default="diffusion",
+        choices=["diffusion", "flow"],
+        help="Training method: diffusion or flow matching",
+    )
     # Optional: you could add JSON string argument for model kwargs if you want to get fancy
     return parser.parse_args()
 
@@ -48,6 +55,7 @@ def main():
         checkpoint_path=args.checkpoint,
         model_name=args.model_name,
         model_kwargs=model_kwargs,
+        method=args.method,
     )
 
 

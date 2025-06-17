@@ -1,9 +1,9 @@
+import os
 from typing import Optional
 
 import torch
 from tqdm import tqdm
 
-from src.models.diffusion import Diffusion
 from src.utils.environment import load_checkpoint
 from src.utils.wandb import (
     initialize_wandb,
@@ -15,7 +15,7 @@ from src.utils.wandb import (
 )
 
 
-def train_one_epoch(model, dataloader, optimizer, diffusion, device, use_wandb):
+def train_one_epoch(model, dataloader, optimizer, method_instance, device, use_wandb):
     model.train()
     total_loss = 0.0
 
@@ -24,7 +24,7 @@ def train_one_epoch(model, dataloader, optimizer, diffusion, device, use_wandb):
         y = labels.to(device)  # Class labels for conditioning
 
         optimizer.zero_grad(set_to_none=True)  # Slightly more efficient memory-wise
-        loss = diffusion.perform_training_step(model, images, y=y)
+        loss = method_instance.perform_training_step(model, images, y=y)
         loss.backward()
         optimizer.step()
 
@@ -37,7 +37,7 @@ def train_one_epoch(model, dataloader, optimizer, diffusion, device, use_wandb):
     return total_loss / max(1, len(dataloader))  # avoid ZeroDivisionError
 
 
-def validate(model, val_loader, diffusion, device):
+def validate(model, val_loader, method_instance, device):
     model.eval()
     total_loss = 0.0
 
@@ -46,7 +46,7 @@ def validate(model, val_loader, diffusion, device):
             images = images.to(device) * 2 - 1
             y = labels.to(device)
 
-            loss = diffusion.perform_training_step(model, images, y=y)
+            loss = method_instance.perform_training_step(model, images, y=y)
             total_loss += loss.item()
 
     return total_loss / len(val_loader)
@@ -60,8 +60,9 @@ def train(
     learning_rate: float = 1e-3,
     use_wandb: bool = False,
     checkpoint_path: Optional[str] = None,
-    model_name: str = "unet",  # new param to specify model
-    model_kwargs: dict = None,  # kwargs for model init
+    model_name: str = "unet",
+    model_kwargs: Optional[dict] = None,
+    method: str = "diffusion",
 ):
     model_kwargs = model_kwargs or {}
 
@@ -74,15 +75,27 @@ def train(
         model_kwargs=model_kwargs,
     )
 
-    if checkpoint_path:
+    # Only create best_model_state if resuming
+    if checkpoint_path and os.path.exists(checkpoint_path):
         best_model_state = {
             "model": model,
             "optimizer": optimizer,
             "val_loss": best_val_loss,
             "epoch": start_epoch,
+            # NOTE: Potentially you can also add the number of steps
         }
 
-    diffusion = Diffusion(img_size=28, device=device)
+    # Select method
+    if method == "diffusion":
+        from src.models.diffusion import Diffusion
+
+        method_instance = Diffusion(img_size=28, device=device)
+    elif method == "flow":
+        from src.models.flow import FlowMatching
+
+        method_instance = FlowMatching(img_size=28, device=device)
+    else:
+        raise ValueError(f"Unsupported method: {method}")
 
     if use_wandb:
         wandb_run = initialize_wandb(
@@ -99,15 +112,15 @@ def train(
         print(f"\nEpoch {epoch}/{num_epochs}")
 
         train_loss = train_one_epoch(
-            model, dataloader, optimizer, diffusion, device, use_wandb
+            model, dataloader, optimizer, method_instance, device, use_wandb
         )
-        val_loss = validate(model, val_loader, diffusion, device)
+        val_loss = validate(model, val_loader, method_instance, device)
 
         print(f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
 
         if use_wandb:
             log_epoch_metrics(epoch, train_loss, val_loss)
-            log_sample_grid(model, diffusion, num_samples=5, num_timesteps=6)
+            log_sample_grid(model, method_instance, num_samples=5, num_timesteps=6)
 
             save_and_log_model_checkpoint(
                 model=model,

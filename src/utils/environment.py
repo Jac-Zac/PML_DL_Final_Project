@@ -1,6 +1,7 @@
 import logging
 import os
 import random
+from typing import Optional
 
 import numpy as np
 import torch
@@ -66,7 +67,7 @@ def get_model(model_name: str, device: torch.device, **kwargs):
 
 def load_checkpoint(
     model_name: str,
-    checkpoint_path: str,
+    checkpoint_path: Optional[str],
     device: torch.device,
     optimizer_class=torch.optim.Adam,
     optimizer_kwargs=None,
@@ -84,20 +85,20 @@ def load_checkpoint(
     model = get_model(model_name, device, **model_kwargs)
     optimizer = optimizer_class(model.parameters(), **optimizer_kwargs)
 
-    if not checkpoint_path or not os.path.exists(checkpoint_path):
-        logger.warning(f"Checkpoint path not found: {checkpoint_path}")
-        return model, optimizer, 1, float("inf")
+    if checkpoint_path and os.path.exists(checkpoint_path):
+        logger.info(f"🔄 Loading checkpoint from {checkpoint_path}")
+        checkpoint = torch.load(checkpoint_path, map_location=device)
+        model.load_state_dict(checkpoint["model_state_dict"])
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        epoch = checkpoint.get("epoch", 0) + 1
+        best_val_loss = checkpoint.get("best_val_loss", float("inf"))
+        logger.info(f"✅ Checkpoint loaded. Resuming from epoch {epoch}")
+    else:
+        epoch = 1
+        best_val_loss = float("inf")
+        if checkpoint_path:
+            logger.warning(f"Checkpoint path not found: {checkpoint_path}")
 
-    logger.info(f"🔄 Loading checkpoint from {checkpoint_path}")
-    checkpoint = torch.load(checkpoint_path, map_location=device)
-
-    model.load_state_dict(checkpoint["model_state_dict"])
-    optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-
-    epoch = checkpoint.get("epoch", 0) + 1
-    best_val_loss = checkpoint.get("best_val_loss", float("inf"))
-
-    logger.info(f"✅ Checkpoint loaded. Resuming from epoch {epoch}")
     return model, optimizer, epoch, best_val_loss
 
 

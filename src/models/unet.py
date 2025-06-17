@@ -129,12 +129,13 @@ class UpBlock(nn.Module):
         total_in = in_channels + skip_channels
         self.double_conv = DoubleConv(total_in, out_channels)
 
+        self.film_linear = nn.Linear(time_emb_dim, out_channels * 4)
         self.film_mlp = nn.Sequential(
             nn.SiLU(),
-            nn.Linear(time_emb_dim, out_channels * 4),
+            self.film_linear,
         )
-        nn.init.zeros_(self.film_mlp[-1].weight)
-        nn.init.zeros_(self.film_mlp[-1].bias)
+        nn.init.zeros_(self.film_linear.weight)
+        nn.init.zeros_(self.film_linear.bias)
 
     def forward(
         self, x: torch.Tensor, skip: torch.Tensor, time_emb: torch.Tensor

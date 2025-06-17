@@ -12,6 +12,7 @@
 
 ### Added but to review
 
+- This is added as the [openai_unet](https://github.com/openai/guided-diffusion/tree/main) it has been simplified and classifier free guidance applied
 - [ ] Flow Matching
 - [ ] LLM model
 

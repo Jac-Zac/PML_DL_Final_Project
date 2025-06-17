@@ -7,18 +7,20 @@ import torch.nn.functional as F
 
 
 class TimeEmbedding(nn.Module):
-    """Simple sinusoidal time embedding."""
-
-    def __init__(self, dim: int):
+    def __init__(self, dim: int, max_period: int = 10000):
         super().__init__()
         self.dim = dim
+        self.max_period = max_period
 
     def forward(self, t: torch.Tensor) -> torch.Tensor:
         half_dim = self.dim // 2
-        emb = math.log(10000) / (half_dim - 1)
+        emb = math.log(self.max_period) / (half_dim - 1)
         emb = torch.exp(torch.arange(half_dim, device=t.device) * -emb)
         emb = t[:, None] * emb[None, :]
-        return torch.cat([emb.sin(), emb.cos()], dim=-1)
+        emb = torch.cat([emb.sin(), emb.cos()], dim=-1)
+        if self.dim % 2:  # pad if dim is odd
+            emb = F.pad(emb, (0, 1), value=0.0)
+        return emb
 
 
 class DoubleConv(nn.Module):
@@ -32,6 +34,8 @@ class DoubleConv(nn.Module):
             mid_channels = out_channels
 
         groups = min(8, out_channels) if out_channels >= 8 else out_channels
+        groups = min(32, out_channels)
+
         mid_groups = min(8, mid_channels) if mid_channels >= 8 else mid_channels
 
         self.conv1 = nn.Conv2d(in_channels, mid_channels, kernel_size=3, padding=1)
@@ -52,14 +56,20 @@ class DoubleConv(nn.Module):
     ) -> torch.Tensor:
         x = self.conv1(x)
         x = self.norm1(x)
-        if gamma1 is not None and beta1 is not None:
-            x = gamma1[:, :, None, None] * x + beta1[:, :, None, None]
+
+        if gamma1 is not None:
+            x = gamma1[:, :, None, None] * x
+        if beta1 is not None:
+            x = x + beta1[:, :, None, None]
         x = self.act1(x)
 
         x = self.conv2(x)
         x = self.norm2(x)
-        if gamma2 is not None and beta2 is not None:
-            x = gamma2[:, :, None, None] * x + beta2[:, :, None, None]
+
+        if gamma2 is not None:
+            x = gamma2[:, :, None, None] * x
+        if beta2 is not None:
+            x = x + beta2[:, :, None, None]
         x = self.act2(x)
 
         return x

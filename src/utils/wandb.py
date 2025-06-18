@@ -10,7 +10,7 @@ import wandb
 def initialize_wandb(project="diffusion-project", run_name=None, config=None):
     if wandb.run is not None:
         print(f"WandB already initialized with project: {wandb.run.project}")
-        return wandb.run  # return the existing run if already initialized
+        return wandb.run
 
     # Load environment variables from .env if present
     load_dotenv()
@@ -49,7 +49,7 @@ def log_epoch_metrics(epoch, train_loss, val_loss, learning_rate):
     )
 
 
-def save_and_log_model_checkpoint(
+def save_model_checkpoint(
     model,
     optimizer,
     scheduler,
@@ -59,6 +59,7 @@ def save_and_log_model_checkpoint(
     best_val_loss: float,
     checkpoint_dir="checkpoints",
 ):
+    """Save regular checkpoint and log as artifact to wandb."""
     os.makedirs(checkpoint_dir, exist_ok=True)
     path = os.path.join(checkpoint_dir, f"epoch_{epoch}.pth")
 
@@ -89,14 +90,20 @@ def save_and_log_model_checkpoint(
     wandb.log_artifact(artifact)
 
 
-def log_best_model(
+def save_best_model_artifact(
     model,
     optimizer,
     scheduler,
-    val_loss: float,
     epoch: int,
-    path="checkpoints/best_model.pth",
+    val_loss: float,
+    train_loss: float,
+    checkpoint_dir="checkpoints",
 ):
+    """Save best model and log as special 'best-model' artifact to wandb."""
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    path = os.path.join(checkpoint_dir, "best_model.pth")
+
+    # Save the checkpoint
     torch.save(
         {
             "epoch": epoch,
@@ -104,17 +111,39 @@ def log_best_model(
             "optimizer_state_dict": optimizer.state_dict(),
             "scheduler_state_dict": scheduler.state_dict(),
             "best_val_loss": val_loss,
+            "train_loss": train_loss,
         },
         path,
     )
+
+    # Create and log the best model artifact
+    artifact = wandb.Artifact(
+        "best-model",
+        type="model",
+        description=f"Best model checkpoint from epoch {epoch}",
+        metadata={
+            "epoch": epoch,
+            "best_val_loss": val_loss,
+            "train_loss": train_loss,
+            "learning_rate": scheduler.get_last_lr()[0],
+        },
+    )
+    artifact.add_file(path, name="best_model.pth")
+    wandb.log_artifact(artifact)
+
+    # Update wandb summary with best metrics
     wandb.summary["best_val_loss"] = val_loss
     wandb.summary["best_val_epoch"] = epoch
+    wandb.summary["best_train_loss"] = train_loss
     wandb.summary["best_val_lr"] = scheduler.get_last_lr()[0]
+
+    print(f"New best model saved! Epoch {epoch}, Val Loss: {val_loss:.4f}")
 
 
 def log_sample_grid(
     model, diffusion, num_samples=5, num_timesteps=6, max_timesteps=1000
 ):
+    """Generate and log sample grid showing diffusion process."""
     t_sample_times = torch.linspace(
         max_timesteps, 0, steps=num_timesteps, dtype=torch.int32
     ).tolist()
@@ -127,7 +156,7 @@ def log_sample_grid(
         model,
         t_sample_times=t_sample_times,
         log_intermediate=True,
-        y=y,  # pass batch of labels
+        y=y,
     )
     # all_samples_grouped shape: (T, B, C, H, W)
 

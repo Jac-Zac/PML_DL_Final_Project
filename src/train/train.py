@@ -8,11 +8,11 @@ from tqdm import tqdm
 from src.utils.environment import load_checkpoint
 from src.utils.wandb import (
     initialize_wandb,
-    log_best_model,
     log_epoch_metrics,
     log_sample_grid,
     log_training_step,
-    save_and_log_model_checkpoint,
+    save_best_model_artifact,
+    save_model_checkpoint,
 )
 
 
@@ -76,6 +76,7 @@ def train(
     model_name: str = "unet",
     model_kwargs: Optional[dict] = None,
     method: str = "diffusion",
+    checkpoint_freq: int = 5,  # Save checkpoint every N epochs
 ):
     model_kwargs = model_kwargs or {}
 
@@ -90,13 +91,14 @@ def train(
         optimizer_class=torch.optim.Adam,
         optimizer_kwargs={"lr": learning_rate},
         model_kwargs=model_kwargs,
-        scheduler=scheduler,  # Now passed into load_checkpoint
+        scheduler=scheduler,
     )
 
     # Re-create scheduler with real optimizer if not loaded
     if not hasattr(scheduler, "optimizer") or scheduler.optimizer is not optimizer:
         scheduler = CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=1e-5)
 
+    # Initialize method instance
     if method == "diffusion":
         from src.models.diffusion import Diffusion
 
@@ -108,6 +110,7 @@ def train(
     else:
         raise ValueError(f"Unsupported method: {method}")
 
+    wandb_run = None
     if use_wandb:
         wandb_run = initialize_wandb(
             project="diffusion-project",
@@ -115,11 +118,10 @@ def train(
                 "epochs": num_epochs,
                 "lr": learning_rate,
                 "model": model_name,
-                "num_classes": model_kwargs["num_classes"],
+                "num_classes": model_kwargs.get("num_classes"),
+                "method": method,
             },
         )
-
-    best_model_state = None
 
     for epoch in range(start_epoch, num_epochs + 1):
         print(f"\nEpoch {epoch}/{num_epochs}")
@@ -136,13 +138,18 @@ def train(
             f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | LR: {current_lr:.6f}"
         )
 
+        # Check if this is the best model
+        is_best = val_loss < best_val_loss
+        if is_best:
+            best_val_loss = val_loss
+
         if use_wandb:
             log_epoch_metrics(epoch, train_loss, val_loss, current_lr)
             log_sample_grid(model, method_instance, num_samples=5, num_timesteps=6)
 
-            # Only log every 5 epochs
-            if epoch % 4 == 0:
-                save_and_log_model_checkpoint(
+            # Save regular checkpoint
+            if epoch % checkpoint_freq == 0:
+                save_model_checkpoint(
                     model=model,
                     optimizer=optimizer,
                     scheduler=scheduler,
@@ -152,19 +159,19 @@ def train(
                     best_val_loss=best_val_loss,
                 )
 
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
-            best_model_state = {
-                "model": model,
-                "optimizer": optimizer,
-                "scheduler": scheduler,
-                "val_loss": best_val_loss,
-                "epoch": epoch,
-            }
+            # Save best model artifact when we find a new best
+            if is_best:
+                save_best_model_artifact(
+                    model=model,
+                    optimizer=optimizer,
+                    scheduler=scheduler,
+                    epoch=epoch,
+                    val_loss=val_loss,
+                    train_loss=train_loss,
+                )
 
-    if use_wandb and best_model_state is not None:
-        log_best_model(**best_model_state)
+    if wandb_run:
         wandb_run.finish()
 
-    print("\nTraining complete.")
+    print(f"\nTraining complete. Best validation loss: {best_val_loss:.4f}")
     return model

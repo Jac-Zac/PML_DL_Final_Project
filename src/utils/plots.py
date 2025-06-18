@@ -5,7 +5,7 @@ import numpy as np
 import torch
 
 
-def plot_image_grid(model, diffusion, args, device, num_classes):
+def plot_image_grid(model, diffusion, n, max_steps, save_dir, device, num_classes):
     """
     Generates samples at intermediate steps and plots a grid where
     rows = samples and columns = timesteps.
@@ -13,18 +13,20 @@ def plot_image_grid(model, diffusion, args, device, num_classes):
     Args:
         model: The diffusion model.
         diffusion: The diffusion sampling object.
-        args: Namespace with attributes `n`, `max_steps`, and `save_dir`.
+        n (int): Number of samples to generate.
+        max_steps (int): Maximum diffusion steps.
+        save_dir (str): Directory to save the output image.
         device: Torch device to run the model on.
         num_classes: Number of classes for label conditioning.
     """
 
     num_intermediate = 5
     intermediate_steps = np.linspace(
-        args.max_steps, 0, num_intermediate + 1, dtype=int
+        max_steps, 0, num_intermediate + 1, dtype=int
     ).tolist()
 
     # Generate labels: 0, 1, ..., n-1 modulo num_classes
-    y = torch.arange(args.n) % num_classes
+    y = torch.arange(n) % num_classes
     y = y.to(device)
 
     # Sample images
@@ -34,7 +36,7 @@ def plot_image_grid(model, diffusion, args, device, num_classes):
         log_intermediate=True,
         y=y,
     )
-    print(f"Generated {args.n} samples with labels {y.tolist()}")
+    print(f"Generated {n} samples with labels {y.tolist()}")
 
     # Reshape and permute
     stacked = torch.stack(all_samples_grouped)  # (T, B, C, H, W)
@@ -42,10 +44,10 @@ def plot_image_grid(model, diffusion, args, device, num_classes):
     flat_samples = permuted.reshape(-1, *permuted.shape[2:])  # (B*T, C, H, W)
 
     # Plot
-    os.makedirs(args.save_dir, exist_ok=True)
-    out_path = os.path.join(args.save_dir, "all_samples_grid.png")
+    os.makedirs(save_dir, exist_ok=True)
+    out_path = os.path.join(save_dir, "all_samples_grid.png")
 
-    num_samples = args.n
+    num_samples = n
     num_timesteps = len(intermediate_steps)
     assert len(flat_samples) == num_samples * num_timesteps, "Mismatch in image count."
 

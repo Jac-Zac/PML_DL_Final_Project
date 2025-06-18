@@ -61,7 +61,15 @@ def main():
 
     diffusion = Diffusion(img_size=28, device=device)
 
-    plot_image_grid(model, diffusion, args, device, num_classes)
+    plot_image_grid(
+        model,
+        diffusion,
+        n=args.n,
+        max_steps=args.max_steps,
+        save_dir=args.save_dir,
+        device=device,
+        num_classes=num_classes,
+    )
 
 
 if __name__ == "__main__":

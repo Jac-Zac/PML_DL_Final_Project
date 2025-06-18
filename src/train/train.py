@@ -2,6 +2,8 @@ import os
 from typing import Optional
 
 import torch
+from torch.nn.utils import clip_grad_norm_
+from torch.optim.lr_scheduler import CosineAnnealingLR
 from tqdm import tqdm
 
 from src.utils.environment import load_checkpoint
@@ -15,17 +17,29 @@ from src.utils.wandb import (
 )
 
 
-def train_one_epoch(model, dataloader, optimizer, method_instance, device, use_wandb):
+def train_one_epoch(
+    model,
+    dataloader,
+    optimizer,
+    method_instance,
+    device,
+    use_wandb,
+    grad_clip: float = 1.0,
+):
     model.train()
     total_loss = 0.0
 
     for images, labels in tqdm(dataloader, desc="Training", leave=False):
-        images = images.to(device).mul_(2).sub_(1)  # In-place normalization to [-1, 1]
-        y = labels.to(device)  # Class labels for conditioning
+        images = images.to(device).mul_(2).sub_(1)
+        y = labels.to(device)
 
-        optimizer.zero_grad(set_to_none=True)  # Slightly more efficient memory-wise
+        optimizer.zero_grad(set_to_none=True)
         loss = method_instance.perform_training_step(model, images, y=y)
         loss.backward()
+
+        if grad_clip is not None:
+            clip_grad_norm_(model.parameters(), max_norm=grad_clip)
+
         optimizer.step()
 
         loss_val = loss.item()
@@ -34,7 +48,7 @@ def train_one_epoch(model, dataloader, optimizer, method_instance, device, use_w
         if use_wandb:
             log_training_step(loss_val)
 
-    return total_loss / max(1, len(dataloader))  # avoid ZeroDivisionError
+    return total_loss / max(1, len(dataloader))
 
 
 def validate(model, val_loader, method_instance, device):
@@ -43,7 +57,7 @@ def validate(model, val_loader, method_instance, device):
 
     with torch.no_grad():
         for images, labels in tqdm(val_loader, desc="Validating", leave=False):
-            images = images.to(device) * 2 - 1
+            images = images.to(device).mul_(2).sub_(1)
             y = labels.to(device)
 
             loss = method_instance.perform_training_step(model, images, y=y)
@@ -75,17 +89,17 @@ def train(
         model_kwargs=model_kwargs,
     )
 
-    # Only create best_model_state if resuming
+    # Add scheduler
+    scheduler = CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=1e-5)
+
     if checkpoint_path and os.path.exists(checkpoint_path):
         best_model_state = {
             "model": model,
             "optimizer": optimizer,
             "val_loss": best_val_loss,
             "epoch": start_epoch,
-            # NOTE: Potentially you can also add the number of steps
         }
 
-    # Select method
     if method == "diffusion":
         from src.models.diffusion import Diffusion
 
@@ -116,7 +130,11 @@ def train(
         )
         val_loss = validate(model, val_loader, method_instance, device)
 
-        print(f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
+        scheduler.step()  # Step the learning rate scheduler
+
+        print(
+            f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | LR: {scheduler.get_last_lr()[0]:.6f}"
+        )
 
         if use_wandb:
             log_epoch_metrics(epoch, train_loss, val_loss)
@@ -140,7 +158,6 @@ def train(
                     "epoch": epoch,
                 }
 
-    # Finalize
     if use_wandb and best_val_loss is not None:
         log_best_model(**best_model_state)
         wandb_run.finish()

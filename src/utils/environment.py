@@ -72,12 +72,13 @@ def load_checkpoint(
     optimizer_class=torch.optim.Adam,
     optimizer_kwargs=None,
     model_kwargs=None,
+    scheduler=None,
 ):
     """
-    Load checkpoint and instantiate model & optimizer.
+    Load checkpoint and instantiate model, optimizer, and optionally scheduler.
 
     Returns:
-        model (nn.Module), optimizer, start_epoch, best_val_loss
+        model (nn.Module), optimizer, scheduler, start_epoch, best_val_loss
     """
     optimizer_kwargs = optimizer_kwargs or {}
     model_kwargs = model_kwargs or {}
@@ -85,21 +86,27 @@ def load_checkpoint(
     model = get_model(model_name, device, **model_kwargs)
     optimizer = optimizer_class(model.parameters(), **optimizer_kwargs)
 
+    epoch = 1
+    best_val_loss = float("inf")
+
     if checkpoint_path and os.path.exists(checkpoint_path):
         logger.info(f"🔄 Loading checkpoint from {checkpoint_path}")
         checkpoint = torch.load(checkpoint_path, map_location=device)
+
         model.load_state_dict(checkpoint["model_state_dict"])
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+
+        if scheduler and "scheduler_state_dict" in checkpoint:
+            scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+
         epoch = checkpoint.get("epoch", 0) + 1
         best_val_loss = checkpoint.get("best_val_loss", float("inf"))
         logger.info(f"✅ Checkpoint loaded. Resuming from epoch {epoch}")
     else:
-        epoch = 1
-        best_val_loss = float("inf")
         if checkpoint_path:
-            logger.warning(f"Checkpoint path not found: {checkpoint_path}")
+            logger.warning(f"⚠️ Checkpoint path not found: {checkpoint_path}")
 
-    return model, optimizer, epoch, best_val_loss
+    return model, optimizer, scheduler, epoch, best_val_loss
 
 
 def load_pretrained_model(
@@ -107,17 +114,38 @@ def load_pretrained_model(
     ckpt_path: str,
     device: torch.device,
     model_kwargs=None,
+    wandb_run=None,  # Optional: allow passing wandb run context
 ):
     """
-    Load a pretrained model weights from checkpoint.
+    Load a pretrained model from a local path or a W&B artifact.
+
+    Args:
+        model_name (str): Name of the model architecture.
+        ckpt_path (str): Path to checkpoint file or W&B artifact reference (e.g. 'user/project/model:latest').
+        device (torch.device): Device to load the model on.
+        model_kwargs (dict): Additional kwargs passed to the model constructor.
+        wandb_run (wandb.Run, optional): Required if loading from a W&B artifact.
 
     Returns:
-        model (nn.Module)
+        nn.Module: The loaded model.
     """
     model_kwargs = model_kwargs or {}
     model = get_model(model_name, device, **model_kwargs)
 
-    if not ckpt_path or not os.path.exists(ckpt_path):
+    # Handle W&B artifact path
+    if ":" in ckpt_path and "/" in ckpt_path:
+        if wandb_run is None:
+            raise ValueError(
+                "🔒 Must provide a wandb_run if loading from W&B artifact."
+            )
+        logger.info(f"📦 Loading model checkpoint from W&B artifact: {ckpt_path}")
+        artifact = wandb_run.use_artifact(ckpt_path, type="model")
+        ckpt_path = artifact.download()
+        ckpt_path = os.path.join(
+            ckpt_path, os.listdir(ckpt_path)[0]
+        )  # assumes only one file in artifact
+
+    if not os.path.exists(ckpt_path):
         raise FileNotFoundError(f"❌ Checkpoint not found: {ckpt_path}")
 
     logger.info(f"🔄 Loading model weights from {ckpt_path}")

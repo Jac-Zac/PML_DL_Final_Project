@@ -1,4 +1,3 @@
-import os
 from typing import Optional
 
 import torch
@@ -80,25 +79,23 @@ def train(
 ):
     model_kwargs = model_kwargs or {}
 
-    model, optimizer, start_epoch, best_val_loss = load_checkpoint(
+    # Initialize scheduler ahead of load_checkpoint
+    dummy_optimizer = torch.optim.Adam([torch.zeros(1)], lr=learning_rate)
+    scheduler = CosineAnnealingLR(dummy_optimizer, T_max=num_epochs, eta_min=1e-5)
+
+    model, optimizer, _, start_epoch, best_val_loss = load_checkpoint(
         model_name=model_name,
         checkpoint_path=checkpoint_path,
         device=device,
         optimizer_class=torch.optim.Adam,
         optimizer_kwargs={"lr": learning_rate},
         model_kwargs=model_kwargs,
+        scheduler=scheduler,  # Now passed into load_checkpoint
     )
 
-    # Add scheduler
-    scheduler = CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=1e-5)
-
-    if checkpoint_path and os.path.exists(checkpoint_path):
-        best_model_state = {
-            "model": model,
-            "optimizer": optimizer,
-            "val_loss": best_val_loss,
-            "epoch": start_epoch,
-        }
+    # Re-create scheduler with real optimizer if not loaded
+    if not hasattr(scheduler, "optimizer") or scheduler.optimizer is not optimizer:
+        scheduler = CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=1e-5)
 
     if method == "diffusion":
         from src.models.diffusion import Diffusion
@@ -122,6 +119,8 @@ def train(
             },
         )
 
+    best_model_state = None
+
     for epoch in range(start_epoch, num_epochs + 1):
         print(f"\nEpoch {epoch}/{num_epochs}")
 
@@ -130,35 +129,40 @@ def train(
         )
         val_loss = validate(model, val_loader, method_instance, device)
 
-        scheduler.step()  # Step the learning rate scheduler
+        scheduler.step()
+        current_lr = scheduler.get_last_lr()[0]
 
         print(
-            f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | LR: {scheduler.get_last_lr()[0]:.6f}"
+            f"Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f} | LR: {current_lr:.6f}"
         )
 
         if use_wandb:
-            log_epoch_metrics(epoch, train_loss, val_loss)
+            log_epoch_metrics(epoch, train_loss, val_loss, current_lr)
             log_sample_grid(model, method_instance, num_samples=5, num_timesteps=6)
 
-            save_and_log_model_checkpoint(
-                model=model,
-                optimizer=optimizer,
-                epoch=epoch,
-                train_loss=train_loss,
-                val_loss=val_loss,
-                best_val_loss=best_val_loss,
-            )
+            # Only log every 5 epochs
+            if epoch % 4 == 0:
+                save_and_log_model_checkpoint(
+                    model=model,
+                    optimizer=optimizer,
+                    scheduler=scheduler,
+                    epoch=epoch,
+                    train_loss=train_loss,
+                    val_loss=val_loss,
+                    best_val_loss=best_val_loss,
+                )
 
-            if val_loss < best_val_loss:
-                best_val_loss = val_loss
-                best_model_state = {
-                    "model": model,
-                    "optimizer": optimizer,
-                    "val_loss": best_val_loss,
-                    "epoch": epoch,
-                }
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            best_model_state = {
+                "model": model,
+                "optimizer": optimizer,
+                "scheduler": scheduler,
+                "val_loss": best_val_loss,
+                "epoch": epoch,
+            }
 
-    if use_wandb and best_val_loss is not None:
+    if use_wandb and best_model_state is not None:
         log_best_model(**best_model_state)
         wandb_run.finish()
 

@@ -38,12 +38,13 @@ def log_training_step(loss: float):
     wandb.log({"train/loss_step": loss})
 
 
-def log_epoch_metrics(epoch, train_loss, val_loss):
+def log_epoch_metrics(epoch, train_loss, val_loss, learning_rate):
     wandb.log(
         {
             "train/loss_epoch": train_loss,
             "val/loss": val_loss,
             "epoch": epoch,
+            "learning_rate": learning_rate,
         }
     )
 
@@ -51,6 +52,7 @@ def log_epoch_metrics(epoch, train_loss, val_loss):
 def save_and_log_model_checkpoint(
     model,
     optimizer,
+    scheduler,
     epoch: int,
     train_loss: float,
     val_loss: float,
@@ -65,6 +67,7 @@ def save_and_log_model_checkpoint(
             "epoch": epoch,
             "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
+            "scheduler_state_dict": scheduler.state_dict(),
             "train_loss": train_loss,
             "val_loss": val_loss,
             "best_val_loss": best_val_loss,
@@ -75,25 +78,38 @@ def save_and_log_model_checkpoint(
     artifact = wandb.Artifact(
         f"model-epoch-{epoch}",
         type="model",
-        metadata={"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss},
+        metadata={
+            "epoch": epoch,
+            "train_loss": train_loss,
+            "val_loss": val_loss,
+            "learning_rate": scheduler.get_last_lr()[0],
+        },
     )
     artifact.add_file(path)
     wandb.log_artifact(artifact)
 
 
 def log_best_model(
-    model, optimizer, val_loss: float, epoch: int, path="checkpoints/best_model.pth"
+    model,
+    optimizer,
+    scheduler,
+    val_loss: float,
+    epoch: int,
+    path="checkpoints/best_model.pth",
 ):
     torch.save(
         {
             "epoch": epoch,
             "model_state_dict": model.state_dict(),
             "optimizer_state_dict": optimizer.state_dict(),
+            "scheduler_state_dict": scheduler.state_dict(),
             "best_val_loss": val_loss,
         },
         path,
     )
     wandb.summary["best_val_loss"] = val_loss
+    wandb.summary["best_val_epoch"] = epoch
+    wandb.summary["best_val_lr"] = scheduler.get_last_lr()[0]
 
 
 def log_sample_grid(

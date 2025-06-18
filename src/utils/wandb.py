@@ -49,47 +49,6 @@ def log_epoch_metrics(epoch, train_loss, val_loss, learning_rate):
     )
 
 
-def save_model_checkpoint(
-    model,
-    optimizer,
-    scheduler,
-    epoch: int,
-    train_loss: float,
-    val_loss: float,
-    best_val_loss: float,
-    checkpoint_dir="checkpoints",
-):
-    """Save regular checkpoint and log as artifact to wandb."""
-    os.makedirs(checkpoint_dir, exist_ok=True)
-    path = os.path.join(checkpoint_dir, f"epoch_{epoch}.pth")
-
-    torch.save(
-        {
-            "epoch": epoch,
-            "model_state_dict": model.state_dict(),
-            "optimizer_state_dict": optimizer.state_dict(),
-            "scheduler_state_dict": scheduler.state_dict(),
-            "train_loss": train_loss,
-            "val_loss": val_loss,
-            "best_val_loss": best_val_loss,
-        },
-        path,
-    )
-
-    artifact = wandb.Artifact(
-        f"model-epoch-{epoch}",
-        type="model",
-        metadata={
-            "epoch": epoch,
-            "train_loss": train_loss,
-            "val_loss": val_loss,
-            "learning_rate": scheduler.get_last_lr()[0],
-        },
-    )
-    artifact.add_file(path)
-    wandb.log_artifact(artifact)
-
-
 def save_best_model_artifact(
     model,
     optimizer,

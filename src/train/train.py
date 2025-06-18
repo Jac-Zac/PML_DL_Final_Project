@@ -12,7 +12,6 @@ from src.utils.wandb import (
     log_sample_grid,
     log_training_step,
     save_best_model_artifact,
-    save_model_checkpoint,
 )
 
 
@@ -76,7 +75,6 @@ def train(
     model_name: str = "unet",
     model_kwargs: Optional[dict] = None,
     method: str = "diffusion",
-    checkpoint_freq: int = 5,  # Save checkpoint every N epochs
 ):
     model_kwargs = model_kwargs or {}
 
@@ -146,18 +144,6 @@ def train(
         if use_wandb:
             log_epoch_metrics(epoch, train_loss, val_loss, current_lr)
             log_sample_grid(model, method_instance, num_samples=5, num_timesteps=6)
-
-            # Save regular checkpoint
-            if epoch % checkpoint_freq == 0:
-                save_model_checkpoint(
-                    model=model,
-                    optimizer=optimizer,
-                    scheduler=scheduler,
-                    epoch=epoch,
-                    train_loss=train_loss,
-                    val_loss=val_loss,
-                    best_val_loss=best_val_loss,
-                )
 
             # Save best model artifact when we find a new best
             if is_best:

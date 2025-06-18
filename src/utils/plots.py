@@ -1,29 +1,58 @@
+import os
+
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 
 
-def plot_image_grid(images, save_path, num_samples, timesteps):
+def plot_image_grid(model, diffusion, args, device, num_classes):
     """
-    Plots a grid where rows = samples and columns = timesteps.
+    Generates samples at intermediate steps and plots a grid where
+    rows = samples and columns = timesteps.
 
     Args:
-        images (list): Flat list of images (torch.Tensor or np.array),
-                       length should be num_samples * len(timesteps)
-        save_path (str): Path to save the output image.
-        num_samples (int): Number of different samples (rows).
-        timesteps (list): List of timesteps per sample (columns).
+        model: The diffusion model.
+        diffusion: The diffusion sampling object.
+        args: Namespace with attributes `n`, `max_steps`, and `save_dir`.
+        device: Torch device to run the model on.
+        num_classes: Number of classes for label conditioning.
     """
-    num_timesteps = len(timesteps)
-    assert (
-        len(images) == num_samples * num_timesteps
-    ), "Image count does not match grid dimensions."
+
+    num_intermediate = 5
+    intermediate_steps = np.linspace(
+        args.max_steps, 0, num_intermediate + 1, dtype=int
+    ).tolist()
+
+    # Generate labels: 0, 1, ..., n-1 modulo num_classes
+    y = torch.arange(args.n) % num_classes
+    y = y.to(device)
+
+    # Sample images
+    all_samples_grouped = diffusion.sample(
+        model,
+        t_sample_times=intermediate_steps,
+        log_intermediate=True,
+        y=y,
+    )
+    print(f"Generated {args.n} samples with labels {y.tolist()}")
+
+    # Reshape and permute
+    stacked = torch.stack(all_samples_grouped)  # (T, B, C, H, W)
+    permuted = stacked.permute(1, 0, 2, 3, 4)  # (B, T, C, H, W)
+    flat_samples = permuted.reshape(-1, *permuted.shape[2:])  # (B*T, C, H, W)
+
+    # Plot
+    os.makedirs(args.save_dir, exist_ok=True)
+    out_path = os.path.join(args.save_dir, "all_samples_grid.png")
+
+    num_samples = args.n
+    num_timesteps = len(intermediate_steps)
+    assert len(flat_samples) == num_samples * num_timesteps, "Mismatch in image count."
 
     fig, axes = plt.subplots(
         num_samples, num_timesteps, figsize=(1.5 * num_timesteps, 1.5 * num_samples)
     )
 
-    # Make sure axes is 2D
     if num_samples == 1:
         axes = np.expand_dims(axes, 0)
     if num_timesteps == 1:
@@ -32,7 +61,7 @@ def plot_image_grid(images, save_path, num_samples, timesteps):
     for row in range(num_samples):
         for col in range(num_timesteps):
             idx = row * num_timesteps + col
-            img = images[idx]
+            img = flat_samples[idx]
             if isinstance(img, torch.Tensor):
                 img = img.squeeze().cpu().numpy()
 
@@ -40,14 +69,11 @@ def plot_image_grid(images, save_path, num_samples, timesteps):
             ax.imshow(img, cmap="gray")
             ax.axis("off")
 
-            # Top row: add timestep label
             if row == 0:
-                ax.set_title(f"t={timesteps[col]}", fontsize=10)
-
-            # Left column: add sample label
+                ax.set_title(f"t={intermediate_steps[col]}", fontsize=10)
             if col == 0:
                 ax.set_ylabel(f"Sample {row+1}", fontsize=10)
 
     plt.tight_layout()
-    plt.savefig(save_path, bbox_inches="tight")
+    plt.savefig(out_path, bbox_inches="tight")
     plt.close()

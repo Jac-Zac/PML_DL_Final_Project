@@ -8,7 +8,7 @@ from torch.nn.utils import parameters_to_vector
 from tqdm import tqdm
 
 
-class CustomModel(nn.Module):
+class LaplaceApproxModel(nn.Module):
     def __init__(self, diff_model, dataloader, args, config):
         super().__init__()
         self.args, self.config = args, config

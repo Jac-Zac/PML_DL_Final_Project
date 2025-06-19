@@ -1,7 +1,6 @@
 # from src.models.diffusion import Diffusion
 
-# Import your custom model class
-from src.models.llla_model import CustomModel
+from src.models.llla_model import LaplaceApproxModel
 from src.utils.data import get_dataloaders
 from src.utils.environment import get_device, load_pretrained_model
 
@@ -10,7 +9,7 @@ def main():
     device = get_device()
     num_classes = 10  # adjust if needed
 
-    # 1️⃣ Load pretrained MAP model using best checkpoint
+    # Load pretrained MAP model using best checkpoint
     diff_model = load_pretrained_model(
         model_name="unet",
         ckpt_path="checkpoints/best_model.pth",
@@ -22,7 +21,7 @@ def main():
     train_loader, _ = get_dataloaders(batch_size=128)
 
     # 3️⃣ Wrap diffusion model with your CustomModel for Laplace last layer approx
-    custom_model = CustomModel(diff_model, train_loader, args=None, config=None)
+    custom_model = LaplaceApproxModel(diff_model, train_loader, args=None, config=None)
 
     custom_model.to(device)
 

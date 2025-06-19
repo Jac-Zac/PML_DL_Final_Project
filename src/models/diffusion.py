@@ -43,9 +43,11 @@ class Diffusion:
         model: nn.Module,
         x_0: Tensor,
         y: Optional[Tensor] = None,
+        t: Optional[Tensor] = None,
     ) -> Tensor:
         x_0 = x_0.to(self.device)
-        t = self._sample_timesteps(x_0.size(0))
+        if t is None:
+            t = self._sample_timesteps(x_0.size(0))
         x_t, noise = self._sample_q(x_0, t)
         noise_pred = model(x_t, t, y=y)
         return self.loss_simple(noise, noise_pred)

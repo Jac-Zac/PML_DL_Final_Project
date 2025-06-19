@@ -7,7 +7,7 @@ from src.utils.environment import get_device, set_seed
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Train DDPM")
+    parser = argparse.ArgumentParser(description="Train a DDPM-style model")
     parser.add_argument("--epochs", type=int, default=10, help="Training epochs")
     parser.add_argument("--batch-size", type=int, default=128, help="Batch size")
     parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
@@ -16,7 +16,7 @@ def parse_args():
         "--checkpoint", type=str, default=None, help="Path to checkpoint"
     )
     parser.add_argument(
-        "--model-name", type=str, default="unet", help="Model name to use from registry"
+        "--model-name", type=str, default="unet", help="Model name from registry"
     )
     parser.add_argument(
         "--method",
@@ -25,7 +25,6 @@ def parse_args():
         choices=["diffusion", "flow"],
         help="Training method: diffusion or flow matching",
     )
-    # Optional: you could add JSON string argument for model kwargs if you want to get fancy
     return parser.parse_args()
 
 
@@ -35,15 +34,11 @@ def main():
     device = get_device()
     os.makedirs("checkpoints", exist_ok=True)
 
-    train_loader, val_loader = get_dataloaders(
-        # batch_size=args.batch_size, num_elements=100
-        batch_size=args.batch_size
-    )
+    # Returns DataLoaders that yield (image, timestep, label)
+    train_loader, val_loader = get_dataloaders(batch_size=args.batch_size)
 
-    # Get number of classes from dataset and add to model_kwargs ...
-    # HACK: We keep it as 10 for now hard coded
-    num_classes = 10
-    model_kwargs = {"num_classes": num_classes}
+    # HACK: Hard-coded number of classes (MNIST = 10)
+    model_kwargs = {"num_classes": 10}
 
     _ = train(
         num_epochs=args.epochs,

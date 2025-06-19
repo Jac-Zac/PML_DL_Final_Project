@@ -5,6 +5,7 @@ import torch.nn as nn
 from laplace.baselaplace import DiagLaplace
 from laplace.curvature.backpack import BackPackEF
 from torch.nn.utils import parameters_to_vector
+from tqdm import tqdm
 
 
 class CustomModel(nn.Module):
@@ -44,7 +45,7 @@ class CustomModel(nn.Module):
         ).detach()
 
         # Inspect output dimensions
-        (X, t), labels = next(iter(train_loader))
+        X, t, labels = next(iter(train_loader))
         with torch.no_grad():
             feats = self.feature_extractor(
                 X.to(self.conv_out_la._device),
@@ -56,8 +57,7 @@ class CustomModel(nn.Module):
         setattr(self.conv_out_la.model, "output_size", self.conv_out_la.n_outputs)
 
         N = len(train_loader.dataset)
-        for i, ((X, t), labels) in enumerate(train_loader):
-            print(f"Batch {i}")
+        for X, t, labels in tqdm(train_loader, desc="Fitting", leave=False):
             self.conv_out_la.model.zero_grad()
             X, t, labels = [x.to(self.conv_out_la._device) for x in (X, t, labels)]
 

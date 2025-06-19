@@ -1,25 +1,9 @@
-from laplace import Laplace
-from torch import nn
+# from src.models.diffusion import Diffusion
 
-from src.models.diffusion import Diffusion
+# Import your custom model class
+from src.models.llla_model import CustomModel
 from src.utils.data import get_dataloaders
 from src.utils.environment import get_device, load_pretrained_model
-
-
-class WrappedModel(nn.Module):
-    """
-    Wraps your UNet-based diffusion model so Laplace knows how to forward inputs
-    including the time step t.
-    """
-
-    def __init__(self, diffusion_unet):
-        super().__init__()
-        self.model = diffusion_unet
-
-    def forward(self, xt):
-        # xt is a tuple (x, t, y) during Laplace .fit(), or you can pack t manually
-        x, t, y = xt
-        return self.model(x, t=t, y=y)  # adjust keyword args as needed
 
 
 def main():
@@ -27,51 +11,33 @@ def main():
     num_classes = 10  # adjust if needed
 
     # 1️⃣ Load pretrained MAP model using best checkpoint
-    model = load_pretrained_model(
+    diff_model = load_pretrained_model(
         model_name="unet",
         ckpt_path="checkpoints/best_model.pth",
         device=device,
         model_kwargs={"num_classes": num_classes, "time_emb_dim": 128},
     )
 
-    wrapped = WrappedModel(model)
-
     # 2️⃣ Prepare data loaders for the Laplace fit
     train_loader, _ = get_dataloaders(batch_size=128)
 
-    # 3️⃣ Wrap model with diagonal last-layer Laplace
-    la = Laplace(
-        wrapped,
-        likelihood="classification",
-        subset_of_weights="last_layer",
-        hessian_structure="diag",
-    )
+    # 3️⃣ Wrap diffusion model with your CustomModel for Laplace last layer approx
+    custom_model = CustomModel(diff_model, train_loader, args=None, config=None)
 
-    la.fit(train_loader)  # fit posterior to last-layer
+    custom_model.to(device)
 
-    # TODO: I don't think this is necessary as a first step
-    # la.optimize_prior_precision(
-    #     method="CV",  # BayesDiff uses cross-validation
-    #     pred_type="glm",  # required for classification
-    #     link_approx="probit",  # common choice for classification
-    #     val_loader=val_loader,
-    # )
-    print(la)
+    # 4️⃣ Now the custom model is fit during initialization, or you can call fit explicitly:
+    custom_model.fit(train_loader)
 
-    # 4️⃣ Use the Laplace-wrapped model for sampling
-    diffusion = Diffusion(img_size=28, device=device)
+    # 5️⃣ You can use custom_model.forward or custom_model.accurate_forward for predictions
 
-    # mean, var = la(x, pred_type="glm", link_approx="probit")
+    # diffusion = Diffusion(img_size=28, device=device)
 
-    # plot_image_grid(
-    #     model,
-    #     diffusion,
-    #     n=10,
-    #     max_steps=1000,
-    #     save_dir="samples",
-    #     device=device,
-    #     num_classes=num_classes,
-    # )
+    # Example usage (replace with actual usage):
+    # x, t, y = next(iter(train_loader))
+    # logits, var = custom_model(x.to(device), t.to(device), y.to(device))
+
+    print("Laplace fitting completed on last layer of the diffusion model.")
 
 
 if __name__ == "__main__":

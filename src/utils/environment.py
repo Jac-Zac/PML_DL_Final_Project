@@ -6,6 +6,7 @@ from typing import Optional
 import numpy as np
 import torch
 
+import wandb
 from src.models.unet import DiffusionUNet
 
 # Import other models here as needed
@@ -114,7 +115,6 @@ def load_pretrained_model(
     ckpt_path: str,
     device: torch.device,
     model_kwargs=None,
-    wandb_run=None,  # Optional: allow passing wandb run context
 ):
     """
     Load a pretrained model from a local path or a W&B artifact.
@@ -124,7 +124,6 @@ def load_pretrained_model(
         ckpt_path (str): Path to checkpoint file or W&B artifact reference (e.g. 'user/project/model:latest').
         device (torch.device): Device to load the model on.
         model_kwargs (dict): Additional kwargs passed to the model constructor.
-        wandb_run (wandb.Run, optional): Required if loading from a W&B artifact.
 
     Returns:
         nn.Module: The loaded model.
@@ -132,18 +131,14 @@ def load_pretrained_model(
     model_kwargs = model_kwargs or {}
     model = get_model(model_name, device, **model_kwargs)
 
-    # Handle W&B artifact path
+    # Check if it's a W&B artifact path
     if ":" in ckpt_path and "/" in ckpt_path:
-        if wandb_run is None:
-            raise ValueError(
-                "🔒 Must provide a wandb_run if loading from W&B artifact."
-            )
         logger.info(f"📦 Loading model checkpoint from W&B artifact: {ckpt_path}")
-        artifact = wandb_run.use_artifact(ckpt_path, type="model")
-        ckpt_path = artifact.download()
+        artifact = wandb.Api().artifact(ckpt_path, type="model")
+        artifact_dir = artifact.download()
         ckpt_path = os.path.join(
-            ckpt_path, os.listdir(ckpt_path)[0]
-        )  # assumes only one file in artifact
+            artifact_dir, os.listdir(artifact_dir)[0]
+        )  # assumes one file in artifact
 
     if not os.path.exists(ckpt_path):
         raise FileNotFoundError(f"❌ Checkpoint not found: {ckpt_path}")

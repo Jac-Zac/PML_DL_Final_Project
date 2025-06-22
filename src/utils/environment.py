@@ -5,8 +5,8 @@ from typing import Optional
 
 import numpy as np
 import torch
-
 import wandb
+
 from src.models.unet import DiffusionUNet
 
 # Import other models here as needed
@@ -115,6 +115,7 @@ def load_pretrained_model(
     ckpt_path: str,
     device: torch.device,
     model_kwargs=None,
+    use_wandb=False,
 ):
     """
     Load a pretrained model from a local path or a W&B artifact.
@@ -124,6 +125,7 @@ def load_pretrained_model(
         ckpt_path (str): Path to checkpoint file or W&B artifact reference (e.g. 'user/project/model:latest').
         device (torch.device): Device to load the model on.
         model_kwargs (dict): Additional kwargs passed to the model constructor.
+        use_wandb (bool): Whether to use W&B API for artifact access.
 
     Returns:
         nn.Module: The loaded model.
@@ -131,14 +133,25 @@ def load_pretrained_model(
     model_kwargs = model_kwargs or {}
     model = get_model(model_name, device, **model_kwargs)
 
+    if use_wandb:
+        from dotenv import load_dotenv
+
+        load_dotenv()
+        wandb_api_key = os.getenv("WANDB_API_KEY")
+        if wandb_api_key is None:
+            wandb_api_key = input(
+                "WANDB_API_KEY environment variable not set. Please enter your WandB API key: "
+            ).strip()
+            if not wandb_api_key:
+                raise ValueError("WandB API key is required to proceed.")
+        wandb.login(key=wandb_api_key)
+
     # Check if it's a W&B artifact path
-    if ":" in ckpt_path and "/" in ckpt_path:
+    if use_wandb and ":" in ckpt_path and "/" in ckpt_path:
         logger.info(f"📦 Loading model checkpoint from W&B artifact: {ckpt_path}")
         artifact = wandb.Api().artifact(ckpt_path, type="model")
         artifact_dir = artifact.download()
-        ckpt_path = os.path.join(
-            artifact_dir, os.listdir(artifact_dir)[0]
-        )  # assumes one file in artifact
+        ckpt_path = os.path.join(artifact_dir, os.listdir(artifact_dir)[0])
 
     if not os.path.exists(ckpt_path):
         raise FileNotFoundError(f"❌ Checkpoint not found: {ckpt_path}")

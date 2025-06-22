@@ -12,9 +12,10 @@ def main():
     # Load pretrained MAP model using best checkpoint
     diff_model = load_pretrained_model(
         model_name="unet",
-        ckpt_path="checkpoints/best_model.pth",
+        ckpt_path="jac-zac/diffusion-project/best-model:v22",
         device=device,
         model_kwargs={"num_classes": num_classes, "time_emb_dim": 128},
+        use_wandb=True,
     )
 
     # 2️⃣ Prepare data loaders for the Laplace fit

@@ -9,6 +9,9 @@ def main():
     device = get_device()
     num_classes = 10  # adjust if needed
 
+    # NOTE: If you have local wanbd directory and different runs online it might interfere
+    # Perhaps fetch the data somehow or remove it so that it looks it up online
+
     # Load pretrained MAP model using best checkpoint
     diff_model = load_pretrained_model(
         model_name="unet",

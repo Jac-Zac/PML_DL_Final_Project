@@ -26,13 +26,9 @@ def main():
     # WARNING: This is currently wrong I have to use the Diffusion class perhaps
     # to return a dataloader with images with noise or somehow use directly the functions inside diffusion
 
-    # 3️⃣ Wrap diffusion model with your CustomModel for Laplace last layer approx
+    # Wrap diffusion model with your CustomModel for Laplace last layer approx
+    # NOTE: Automatically call fit
     custom_model = LaplaceApproxModel(diff_model, train_loader, args=None, config=None)
-
-    custom_model.to(device)
-
-    # 4️⃣ Now the custom model is fit during initialization, or you can call fit explicitly:
-    custom_model.fit(train_loader)
 
     print("Laplace fitting completed on last layer of the diffusion model.")
 

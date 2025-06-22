@@ -48,6 +48,9 @@ class LaplaceApproxModel(nn.Module):
         Fit the Laplace approximation by estimating the curvature (Hessian) of the
         loss around the MAP estimate using the training data.
         """
+        # NOTE: Add here the modification that you need to do to pass correct samples to it not in the
+        # dataloader and you can use the Diffusion class
+
         if override:
             # Initialize the Hessian approximation matrix and reset loss counters
             self.conv_out_la._init_H()
@@ -102,6 +105,7 @@ class LaplaceApproxModel(nn.Module):
         # Update the number of data points seen for Laplace approximation
         self.conv_out_la.n_data += N
 
+    # NOTE: This can be changed so that you pass the n_samples to estimate the uncertainty
     def forward(self, x, t, y=None):
         """
         Forward pass using the Laplace-approximated model.

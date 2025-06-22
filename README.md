@@ -15,6 +15,7 @@
 - This is added as the [openai_unet](https://github.com/openai/guided-diffusion/tree/main) it has been simplified and classifier free guidance applied
 - [ ] Flow Matching
 - [ ] LLM model
+- [ ] Create plots of how much is the uncertainty during the de-noising step if it increases monotonically or something (For Ansuini)
 
 ## 🧪 Running the Project
 

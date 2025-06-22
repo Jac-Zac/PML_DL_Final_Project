@@ -100,25 +100,46 @@ def save_best_model_artifact(
 
 
 def log_sample_grid(
-    model, diffusion, num_samples=5, num_timesteps=6, max_timesteps=1000
+    model, method_instance, num_samples=5, num_timesteps=6, max_timesteps=1000
 ):
-    """Generate and log sample grid showing diffusion process."""
-    t_sample_times = torch.linspace(
-        max_timesteps, 0, steps=num_timesteps, dtype=torch.int32
-    ).tolist()
+    """Generate and log sample grid showing the generative process."""
 
     # Create batch of conditioning labels [0, 1, 2, ..., num_samples-1]
-    y = torch.arange(num_samples, device=diffusion.device)
+    y = torch.arange(num_samples, device=method_instance.device)
 
-    # Sample all at once in batch
-    all_samples_grouped = diffusion.sample(
-        model,
-        t_sample_times=t_sample_times,
-        log_intermediate=True,
-        y=y,
-    )
+    # Handle different sampling approaches for different methods
+    if (
+        hasattr(method_instance, "__class__")
+        and method_instance.__class__.__name__ == "FlowMatching"
+    ):
+        # For flow matching: sample step indices evenly distributed
+        # Flow matching goes from step 0 to steps-1, so we want to see intermediate steps
+        steps = 100  # or whatever you use for sampling steps
+        step_indices = torch.linspace(
+            0, steps - 1, steps=num_timesteps, dtype=torch.int32
+        ).tolist()
+
+        all_samples_grouped = method_instance.sample(
+            model,
+            steps=steps,
+            log_intermediate=True,
+            t_sample_times=step_indices,  # Pass step indices
+            y=y,
+        )
+    else:
+        # For diffusion: use timestep values (original approach)
+        t_sample_times = torch.linspace(
+            max_timesteps, 0, steps=num_timesteps, dtype=torch.int32
+        ).tolist()
+
+        all_samples_grouped = method_instance.sample(
+            model,
+            t_sample_times=t_sample_times,
+            log_intermediate=True,
+            y=y,
+        )
+
     # all_samples_grouped shape: (T, B, C, H, W)
-
     # Rearrange to (B, T, C, H, W)
     stacked = torch.stack(all_samples_grouped)  # (T, B, C, H, W)
     permuted = stacked.permute(1, 0, 2, 3, 4)  # (B, T, C, H, W)
@@ -128,7 +149,13 @@ def log_sample_grid(
     for sample_idx in range(num_samples):
         sample_images = permuted[sample_idx]  # (T, C, H, W)
         row_grid = vutils.make_grid(
-            sample_images, nrow=num_timesteps, normalize=True, value_range=(-1, 1)
+            sample_images,
+            nrow=num_timesteps,
+            normalize=True,
+            value_range=(
+                0,
+                1,
+            ),  # Changed to (0,1) since transform_sampled_image normalizes to [0,1]
         )
         rows.append(row_grid)
 

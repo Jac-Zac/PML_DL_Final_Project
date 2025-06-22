@@ -27,8 +27,10 @@ class FlowMatching:
 
         # True velocity & normalization
         u = x1 - x0
-        norm = u.flatten(1).norm(dim=1, keepdim=True).view(-1, 1, 1, 1).clamp(min=1e-6)
-        u = u / norm
+
+        # FIX: REMOVE THIS NORMALIZATION
+        # norm = u.flatten(1).norm(dim=1, keepdim=True).view(-1, 1, 1, 1).clamp(min=1e-6)
+        # u = u / norm
 
         v = model(x_t, t, y=y)
         assert v.shape == u.shape
@@ -65,10 +67,10 @@ class FlowMatching:
             t = torch.full((B,), i / steps, device=self.device)
             v = model(x_t, t, y=y)
             x_t = x_t + v * dt
+
             if log_intermediate and t_sample_times and i in t_sample_times:
                 results.append(self.transform_sampled_image(x_t.clone()))
 
-        results.append(self.transform_sampled_image(x_t))
         return results
 
     @staticmethod

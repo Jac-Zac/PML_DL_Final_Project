@@ -27,13 +27,12 @@ def train_one_epoch(
     model.train()
     total_loss = 0.0
 
-    for images, timesteps, labels in tqdm(dataloader, desc="Training", leave=False):
+    for images, labels in tqdm(dataloader, desc="Training", leave=False):
         images = images.to(device).mul_(2).sub_(1)
         y = labels.to(device)
-        t = timesteps.to(device)
 
         optimizer.zero_grad(set_to_none=True)
-        loss = method_instance.perform_training_step(model, images, y=y, t=t)
+        loss = method_instance.perform_training_step(model, images, y=y)
         loss.backward()
 
         if grad_clip is not None:
@@ -55,14 +54,11 @@ def validate(model, val_loader, method_instance, device):
     total_loss = 0.0
 
     with torch.no_grad():
-        for images, timesteps, labels in tqdm(
-            val_loader, desc="Validating", leave=False
-        ):
+        for images, labels in tqdm(val_loader, desc="Validating", leave=False):
             images = images.to(device).mul_(2).sub_(1)
             y = labels.to(device)
-            t = timesteps.to(device)
 
-            loss = method_instance.perform_training_step(model, images, y=y, t=t)
+            loss = method_instance.perform_training_step(model, images, y=y)
             total_loss += loss.item()
 
     return total_loss / len(val_loader)

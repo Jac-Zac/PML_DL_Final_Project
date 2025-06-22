@@ -23,22 +23,44 @@ def get_dataloaders(
     batch_size: int = 120,
     shuffle: bool = True,
     num_elements: Optional[int] = None,
+) -> Tuple[DataLoader, DataLoader]:
+    """
+    Load MNIST dataset and return (image, label) DataLoaders.
+    """
+    transform = transforms.Compose(
+        [
+            transforms.ToTensor(),
+            transforms.Normalize((0.1307,), (0.3081,)),
+            transforms.Resize((28, 28)),
+        ]
+    )
+
+    train_data = datasets.MNIST(
+        root="./data", train=True, download=True, transform=transform
+    )
+    test_data = datasets.MNIST(
+        root="./data", train=False, download=True, transform=transform
+    )
+
+    if num_elements is not None:
+        train_data = Subset(train_data, range(min(num_elements, len(train_data))))
+        test_data = Subset(test_data, range(min(num_elements, len(test_data))))
+
+    train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=shuffle)
+    test_loader = DataLoader(test_data, batch_size=batch_size, shuffle=False)
+
+    return train_loader, test_loader
+
+
+def get_llla_dataloader(
+    batch_size: int = 120,
+    shuffle: bool = True,
+    num_elements: Optional[int] = None,
     max_timesteps: int = 1000,
 ) -> Tuple[DataLoader, DataLoader]:
     """
-    Load MNIST dataset and create data loaders that return (image, t, label).
-
-    Parameters:
-    - batch_size (int): Batch size for data loaders.
-    - shuffle (bool, optional): Whether to shuffle the training data. Defaults to True.
-    - num_elements (int, optional): Number of elements to retrieve from the dataset. Defaults to None.
-    - max_timesteps (int): Maximum diffusion timestep to sample from. Defaults to 1000.
-
-    Returns:
-    - train_loader (DataLoader): Training data loader.
-    - test_loader (DataLoader): Testing data loader.
+    Load MNIST dataset and return DiffusionMNIST DataLoaders (image, t, label).
     """
-
     transform = transforms.Compose(
         [
             transforms.ToTensor(),

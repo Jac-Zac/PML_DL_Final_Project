@@ -5,8 +5,8 @@ from typing import Optional
 
 import numpy as np
 import torch
-import wandb
 
+import wandb
 from src.models.unet import DiffusionUNet
 
 # Import other models here as needed

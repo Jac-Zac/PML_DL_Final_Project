@@ -1,7 +1,6 @@
 # from src.models.diffusion import Diffusion
-
 from src.models.llla_model import LaplaceApproxModel
-from src.utils.data import get_dataloaders
+from src.utils.data import get_llla_dataloader
 from src.utils.environment import get_device, load_pretrained_model
 
 
@@ -22,7 +21,10 @@ def main():
     )
 
     # 2️⃣ Prepare data loaders for the Laplace fit
-    train_loader, _ = get_dataloaders(batch_size=128)
+    train_loader, _ = get_llla_dataloader(batch_size=128)
+
+    # WARNING: This is currently wrong I have to use the Diffusion class perhaps
+    # to return a dataloader with images with noise or somehow use directly the functions inside diffusion
 
     # 3️⃣ Wrap diffusion model with your CustomModel for Laplace last layer approx
     custom_model = LaplaceApproxModel(diff_model, train_loader, args=None, config=None)
@@ -32,15 +34,21 @@ def main():
     # 4️⃣ Now the custom model is fit during initialization, or you can call fit explicitly:
     custom_model.fit(train_loader)
 
-    # 5️⃣ You can use custom_model.forward or custom_model.accurate_forward for predictions
-
-    # diffusion = Diffusion(img_size=28, device=device)
-
-    # Example usage (replace with actual usage):
-    # x, t, y = next(iter(train_loader))
-    # logits, var = custom_model(x.to(device), t.to(device), y.to(device))
-
     print("Laplace fitting completed on last layer of the diffusion model.")
+
+    # NOTE:
+    # 5️⃣ You can use custom_model.forward or custom_model.accurate_forward for predictions
+    # Inside the Diffusion code
+
+    # Instantiate the Diffusion class
+    # diffusion = Diffusion(img_size=28, device=device)
+    #
+    # # Sample using the Laplace-approximated model
+    # samples = diffusion.sample(model=custom_model, channels=1)
+    # final_images = samples[-1]  # normalized to [0,1]
+    #
+    # # Do something with final_images — save them or visualize
+    # print(f"Generated batch of {final_images.shape[0]} images!")
 
 
 if __name__ == "__main__":

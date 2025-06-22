@@ -1,6 +1,6 @@
-import random
 from typing import Optional, Tuple
 
+import torch
 from torch.utils.data import DataLoader, Dataset, Subset
 from torchvision import datasets, transforms
 
@@ -38,18 +38,33 @@ def get_dataloaders(
     return train_loader, test_loader
 
 
+# NOTE: This is the dataloader for diffusion LLLA
+
+
 class DiffusionMNIST(Dataset):
     def __init__(self, base_dataset: Dataset, max_timesteps: int = 1000):
         self.base_dataset = base_dataset
         self.max_timesteps = max_timesteps
+        self.betas = torch.linspace(1e-4, 0.02, max_timesteps)
+        self.alphas = 1.0 - self.betas
+        self.alphas_cumprod = torch.cumprod(self.alphas, dim=0)
 
     def __len__(self):
         return len(self.base_dataset)
 
     def __getitem__(self, idx):
         image, label = self.base_dataset[idx]
-        t = random.randint(0, self.max_timesteps - 1)
-        return image, t, label
+        image = image * 2.0 - 1.0  # scale to [-1,1]
+
+        # sample a random timestep
+        t = torch.randint(low=0, high=self.max_timesteps, size=(1,))
+        a = self.alphas_cumprod[t]
+
+        noise = torch.randn_like(image)
+        x_t = image * a.sqrt() + noise * (1 - a).sqrt()
+
+        # return (image_noised, timestep, label)
+        return x_t, t.squeeze(0), label
 
 
 def get_llla_dataloader(

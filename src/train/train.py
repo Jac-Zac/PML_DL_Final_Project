@@ -28,6 +28,7 @@ def train_one_epoch(
     total_loss = 0.0
 
     for images, labels in tqdm(dataloader, desc="Training", leave=False):
+        # NOTE: Rescaling for between [-1, 1] for training stability
         images = images.to(device).mul_(2).sub_(1)
         y = labels.to(device)
 

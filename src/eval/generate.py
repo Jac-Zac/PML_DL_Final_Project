@@ -1,12 +1,13 @@
 import argparse
 
-from src.models.diffusion import Diffusion
 from src.utils.environment import get_device, load_pretrained_model
 from src.utils.plots import plot_image_grid
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Generate DDPM samples")
+    parser = argparse.ArgumentParser(
+        description="Generate samples with either diffusion or flow matching"
+    )
     parser.add_argument(
         "--ckpt",
         type=str,
@@ -29,7 +30,7 @@ def parse_args():
         "--max-steps",
         type=int,
         default=1000,
-        help="Maximum number of diffusion timesteps (default: 50)",
+        help="Maximum number of timesteps for diffusion",
     )
     parser.add_argument(
         "--model-name",
@@ -37,21 +38,27 @@ def parse_args():
         default="unet",
         help="Model name to use from registry",
     )
+    parser.add_argument(
+        "--method",
+        type=str,
+        choices=["diffusion", "flow"],
+        default="diffusion",
+        help="Which generative method to use",
+    )
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
-
     device = get_device()
-    # HACK: Hard coded number of classes for now
     num_classes = 10
 
     model_kwargs = {
         "num_classes": num_classes,
-        "time_emb_dim": 128,  # you can make this a CLI arg if needed
+        "time_emb_dim": 128,
     }
 
+    # Load pretrained model
     model = load_pretrained_model(
         model_name=args.model_name,
         ckpt_path=args.ckpt,
@@ -59,11 +66,20 @@ def main():
         model_kwargs=model_kwargs,
     )
 
-    diffusion = Diffusion(img_size=28, device=device)
+    # Choose generation method
+    if args.method == "diffusion":
+        from src.models.diffusion import Diffusion
+
+        method_instance = Diffusion(img_size=28, device=device)
+    elif args.method == "flow":
+        from src.models.flow import FlowMatching
+
+        method_instance = FlowMatching(img_size=28, device=device)
 
     plot_image_grid(
         model,
-        diffusion,
+        method_instance,
+        num_intermediate=5,
         n=args.n,
         max_steps=args.max_steps,
         save_dir=args.save_dir,

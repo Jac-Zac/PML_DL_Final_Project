@@ -3,12 +3,12 @@
 # TODO:
 
 > NOTE: if we want to use UVIT which I prefer we still have to deal with the mess coming from latent space
-> To deal with it you do Monte Carlo sampling, which allows you to estimate epistemic uncertaint
+> To deal with it you do Monte Carlo sampling, which allows you to estimate epistemic uncertainty
 
-- Modify the model to have a linear layer at the end
 - Modify the validation to use the fast sampling instead (if you want). We can avoid fast sampling
 - Try to do LLLA after you have changed the last layer to be linear
-- Implement Flow Matching instead of Diffiusion (using still the same Unet), We should be able to swap with a model registry
+- Implement Flow Matching instead of Diffiusion (using still the same Unet),
+- Implement the iteration principle proposed in the paper
 
 ### Added but to review
 

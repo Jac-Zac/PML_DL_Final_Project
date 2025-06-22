@@ -1,4 +1,4 @@
-# from src.models.diffusion import Diffusion
+from src.models.diffusion import QUDiffusion
 from src.models.llla_model import LaplaceApproxModel
 from src.utils.data import get_llla_dataloader
 from src.utils.environment import get_device, load_pretrained_model
@@ -28,23 +28,33 @@ def main():
 
     # Wrap diffusion model with your CustomModel for Laplace last layer approx
     # NOTE: Automatically call fit
-    custom_model = LaplaceApproxModel(diff_model, train_loader, args=None, config=None)
+    laplace_model = LaplaceApproxModel(diff_model, train_loader, args=None, config=None)
 
     print("Laplace fitting completed on last layer of the diffusion model.")
 
     # NOTE:
-    # 5️⃣ You can use custom_model.forward or custom_model.accurate_forward for predictions
-    # Inside the Diffusion code
+    # You can use custom_model.forward or custom_model.accurate_forward for predictions
 
-    # Instantiate the Diffusion class
-    # diffusion = Diffusion(img_size=28, device=device)
-    #
-    # # Sample using the Laplace-approximated model
-    # samples = diffusion.sample(model=custom_model, channels=1)
-    # final_images = samples[-1]  # normalized to [0,1]
-    #
-    # # Do something with final_images — save them or visualize
-    # print(f"Generated batch of {final_images.shape[0]} images!")
+    # Initialize uncertainty-aware diffusion (same interface as base class)
+    diffusion = QUDiffusion(img_size=28, device=device)
+
+    # Works exactly like base Diffusion class
+    samples = diffusion.sample(model=laplace_model)
+
+    # Or get detailed uncertainty information
+    samples, uncertainties = diffusion.sample_with_uncertainty(
+        model=laplace_model,
+        channels=3,
+    )
+
+    return diffusion
+
+    # Sample using the Laplace-approximated model
+    samples = diffusion.sample(model=custom_model, channels=1)
+    final_images = samples[-1]  # normalized to [0,1]
+
+    # Do something with final_images — save them or visualize
+    print(f"Generated batch of {final_images.shape[0]} images!")
 
 
 if __name__ == "__main__":

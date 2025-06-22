@@ -15,10 +15,11 @@ class FlowMatching:
     def perform_training_step(
         self,
         model: nn.Module,
-        x0: Tensor,  # noise ~ N(0,I)
         x1: Tensor,  # data in [-1,1]
         y: Optional[Tensor] = None,
     ) -> Tensor:
+        x0 = torch.randn_like(x1)
+
         B = x0.size(0)
         t = self._sample_timesteps(B)
         t4 = t.view(-1, 1, 1, 1)
@@ -32,9 +33,8 @@ class FlowMatching:
         v = model(x_t, t, y=y)
         assert v.shape == u.shape
 
-        # Time-weighted MSE loss
-        w = t4.pow(2)
-        return (w * (v - u).pow(2)).mean()
+        # MSE loss
+        return ((v - u).pow(2)).mean()
 
     @torch.no_grad()
     def sample(

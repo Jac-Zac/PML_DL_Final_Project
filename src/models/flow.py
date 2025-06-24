@@ -22,7 +22,7 @@ class FlowMatching:
 
         B = x0.size(0)
         t = self._sample_timesteps(B)
-        t4 = t.view(-1, 1, 1, 1)
+        t4 = t.view(-1, 1, 1, 1)  # shape: [B, 1, 1, 1]
         x_t = (1 - t4) * x0 + t4 * x1  # linear OT path
 
         # True velocity & normalization

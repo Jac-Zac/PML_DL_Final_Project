@@ -26,7 +26,7 @@ def main():
     # WARNING: This is currently wrong I have to use the Diffusion class perhaps
     # to return a dataloader with images with noise or somehow use directly the functions inside diffusion
 
-    # Wrap diffusion model with your CustomModel for Laplace last layer approx
+    # Wrap diffusion model with your Custom Model for Laplace last layer approx
     # NOTE: Automatically call fit
     laplace_model = LaplaceApproxModel(diff_model, train_loader, args=None, config=None)
 
@@ -38,14 +38,17 @@ def main():
     # Initialize uncertainty-aware diffusion (same interface as base class)
     diffusion = QUDiffusion(img_size=28, device=device)
 
-    # Works exactly like base Diffusion class
-    samples = diffusion.sample(model=laplace_model)
-
-    # Or get detailed uncertainty information
-    samples, uncertainties = diffusion.sample_with_uncertainty(
-        model=laplace_model,
-        channels=3,
+    # Sample to detailed uncertainty information
+    intermediates, uncertainties, covariances, mc_mean_x0, mc_var_x0 = (
+        diffusion.sample_with_uncertainty(
+            model=laplace_model,
+            channels=1,
+        )
     )
+
+    print(uncertainties)
+    print(mc_mean_x0)
+    print(mc_var_x0)
 
     return diffusion
 

@@ -21,7 +21,7 @@ def main():
     )
 
     # 2️⃣ Prepare data loaders for the Laplace fit
-    train_loader, _ = get_llla_dataloader(batch_size=128)
+    train_loader, _ = get_llla_dataloader(batch_size=128, num_elements=10)
 
     # WARNING: This is currently wrong I have to use the Diffusion class perhaps
     # to return a dataloader with images with noise or somehow use directly the functions inside diffusion

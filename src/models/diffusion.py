@@ -226,81 +226,65 @@ class QUDiffusion(Diffusion):
         channels: int = 1,
         log_intermediate: bool = False,
         y: Optional[Tensor] = None,
-        num_monte_carlo_sample: int = 10,
-    ) -> Tuple[List[Tensor], List[Tensor], List[Tensor], Tensor, Tensor]:
+        estimate_cov: bool = True,
+    ) -> Tuple[List[Tensor], List[Tensor], Optional[List[Tensor]]]:
         """
-        Iteratively sample from the model with predictive uncertainty.
-
-        Returns:
-            intermediates: Images at intermediate timesteps (if enabled)
-            uncertainties: Accumulated predictive variances
-            covariances: Cov(x_t, eps_t) per step
-            mc_mean_x0: Empirical mean of final x_0 samples
-            mc_var_x0: Empirical pixel-wise variance via MC
+        Iteratively sample from the model, tracking predictive uncertainty and optionally Cov(x, ε).
         """
         model.eval()
         batch_size = 1 if y is None else y.size(0)
-        device = self.device
 
-        # Step 1: Initialize sampling
         x_t = torch.randn(
-            batch_size, channels, self.img_size, self.img_size, device=device
+            batch_size, channels, self.img_size, self.img_size, device=self.device
         )
         var_x_t = torch.zeros_like(x_t)
-        cov_xt_eps = torch.zeros_like(x_t)
 
-        intermediates, uncertainties, covariances = [], [], []
+        intermediates, uncertainties = [], []
+        covariances = [] if estimate_cov else None
 
-        # Step 2: Reverse diffusion
         for i in reversed(range(self.noise_steps)):
-            t = torch.full((batch_size,), i, device=device, dtype=torch.long)
+            t = torch.full((batch_size,), i, device=self.device, dtype=torch.long)
 
-            # Get predictive mean and variance of noise
-            eps_t_mean, eps_t_var = model(x_t, t, y=y)
+            # Predict noise and its variance
+            eps_pred, eps_var = model(x_t, t, y=y)
 
-            # Sample actual noise (step 5 in Algorithm 1)
-            eps_t_sampled = eps_t_mean + torch.sqrt(
-                torch.clamp(eps_t_var, min=1e-8)
-            ) * torch.randn_like(x_t)
-
-            # Estimate xt-1 (Equation 7: DDPM mean step)
+            # Sample xt-1
             beta_t = self.beta[t].view(-1, 1, 1, 1)
             alpha_t = self.alpha[t].view(-1, 1, 1, 1)
             alpha_bar_t = self.alpha_bar[t].view(-1, 1, 1, 1)
 
-            coef1 = 1.0 / torch.sqrt(alpha_t)
-            coef2 = (1.0 - alpha_t) / torch.sqrt(alpha_bar_t)
-            x_prev_mean = coef1 * (x_t - coef2 * eps_t_sampled)
+            coef1 = 1.0 / alpha_t.sqrt()
+            coef2 = (1.0 - alpha_t) / (1.0 - alpha_bar_t).sqrt()
+            x_prev_mean = coef1 * (x_t - coef2 * eps_pred)
 
-            # Estimate variance of xt-1 via Equation (8)
-            total_var = beta_t + eps_t_var.clamp(min=1e-8)
-            var_x_t = self._var_iteration(
-                var_x_t, self.noise_schedule, t + 1, t, cov_xt_eps, eps_t_var
-            )
+            if i > 0:
+                total_var = beta_t + eps_var.clamp(min=1e-8)
+                noise = torch.randn_like(x_t)
+                x_t = x_prev_mean + total_var.sqrt() * noise
+            else:
+                x_t = x_prev_mean
 
-            # Sample xt-1 from Gaussian (Equation 10)
-            x_t = self.sample_from_gaussian(x_prev_mean, total_var)
-
-            # Estimate Cov(xt-1, eps_t-1) (Equation 11)
-            cov_xt_eps = (x_t - x_prev_mean) * eps_t_sampled
-
-            # Store intermediate results
+            # Propagate uncertainty
+            var_x_t += eps_var.clamp(min=1e-8) + beta_t
             uncertainties.append(var_x_t.sum(dim=(1, 2, 3)).cpu())
-            covariances.append(cov_xt_eps.sum(dim=(1, 2, 3)).cpu())
 
+            # Compute variance
+            if estimate_cov:
+                # Stima empirica della covarianza pixel-wise: Cov(x, ε)
+                x_mean = x_t.mean(dim=(1, 2, 3), keepdim=True)
+                eps_mean = eps_pred.mean(dim=(1, 2, 3), keepdim=True)
+                cov_xt_eps = ((x_t - x_mean) * (eps_pred - eps_mean)).mean(
+                    dim=(1, 2, 3), keepdim=True
+                )
+                covariances.append(cov_xt_eps.cpu())
+
+            # Log immagini intermedie
             if log_intermediate and t_sample_times and i in t_sample_times:
                 intermediates.append(self.transform_sampled_image(x_t.clone()))
 
-        # Final MC sampling step at t=0
-        mc_mean_x0, mc_var_x0 = self._monte_carlo_sample_final_step(
-            x_t, var_x_t, num_monte_carlo_sample
-        )
-
-        # Append final image to intermediates
-        intermediates.append(self.transform_sampled_image(mc_mean_x0))
-
+        intermediates.append(self.transform_sampled_image(x_t))
         model.train()
-        return intermediates, uncertainties, covariances, mc_mean_x0, mc_var_x0
+        return intermediates, uncertainties, covariances
 
     @torch.no_grad()
     def sample(

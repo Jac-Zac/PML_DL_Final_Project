@@ -39,16 +39,14 @@ def main():
     diffusion = QUDiffusion(img_size=28, device=device)
 
     # Sample to detailed uncertainty information
-    intermediates, uncertainties, covariances, mc_mean_x0, mc_var_x0 = (
-        diffusion.sample_with_uncertainty(
-            model=laplace_model,
-            channels=1,
-        )
+    intermediates, uncertainties, covariances = diffusion.sample_with_uncertainty(
+        model=laplace_model,
+        channels=1,
     )
 
-    print(uncertainties)
-    print(mc_mean_x0)
-    print(mc_var_x0)
+    # print(intermediates)
+    # print(uncertainties)
+    # print(covariances)
 
     return diffusion
 

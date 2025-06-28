@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 
 import torch
 from torch.utils.data import DataLoader, Dataset, Subset
@@ -49,19 +49,30 @@ class DiffusionMNIST(Dataset):
         self.alphas = 1.0 - self.betas
         self.alphas_cumprod = torch.cumprod(self.alphas, dim=0)
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.base_dataset)
 
-    def __getitem__(self, idx):
+    def __getitem__(
+        self, idx: int
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, Any]:
         image, label = self.base_dataset[idx]
         image = image * 2.0 - 1.0  # scale to [-1,1]
 
         # sample a random timestep
         t = torch.randint(low=0, high=self.max_timesteps, size=(1,))
         a = self.alphas_cumprod[t]
-
         noise = torch.randn_like(image)
-        x_t = image * a.sqrt() + noise * (1 - a).sqrt()
+
+        # Apply proper tensor reshaping for broadcasting
+        sqrt_a = a.sqrt()
+        sqrt_one_minus_a = (1 - a).sqrt()
+
+        # Ensure proper broadcasting by reshaping if needed
+        if image.dim() > 1:  # If image has multiple dimensions
+            sqrt_a = sqrt_a.view(-1, *([1] * (image.dim() - 1)))
+            sqrt_one_minus_a = sqrt_one_minus_a.view(-1, *([1] * (image.dim() - 1)))
+
+        x_t = image * sqrt_a + noise * sqrt_one_minus_a
 
         # return (image_noised, timestep, noise, label)
         return x_t, t.squeeze(0), noise, label

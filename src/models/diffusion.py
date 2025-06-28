@@ -246,15 +246,16 @@ class UQDiffusion(Diffusion):
                 1 / alpha_t * (x_t_var - coef3 * cov_t + coef4 * eps_var) + beta_t
             )
 
-            # Covariance estimation with Monte Carlo
-            covariance = self.monte_carlo_covariance_estim(
-                model=model,
-                t=t,
-                x_mean=x_prev_mean,
-                x_var=x_prev_var,
-                S=cov_num_sample,
-                y=y,
-            )
+            if i > 0:
+                # Covariance estimation with Monte Carlo
+                covariance = self.monte_carlo_covariance_estim(
+                    model=model,
+                    t=t - 1,
+                    x_mean=x_prev_mean,
+                    x_var=x_prev_var,
+                    S=cov_num_sample,
+                    y=y,
+                )
 
             # Log intermediate images
             if log_intermediate and t_sample_times and i in t_sample_times:

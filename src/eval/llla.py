@@ -1,7 +1,10 @@
-from src.models.diffusion import QUDiffusion
+import os
+
+from src.models.diffusion import UQDiffusion
 from src.models.llla_model import LaplaceApproxModel
 from src.utils.data import get_llla_dataloader
 from src.utils.environment import get_device, load_pretrained_model
+from src.utils.plots import plot_image_uncertainty_grid
 
 
 def main():
@@ -21,7 +24,7 @@ def main():
     )
 
     # 2️⃣ Prepare data loaders for the Laplace fit
-    train_loader, _ = get_llla_dataloader(batch_size=128, num_elements=10)
+    train_loader, _ = get_llla_dataloader(batch_size=128)
 
     # WARNING: This is currently wrong I have to use the Diffusion class perhaps
     # to return a dataloader with images with noise or somehow use directly the functions inside diffusion
@@ -36,13 +39,33 @@ def main():
     # You can use custom_model.forward or custom_model.accurate_forward for predictions
 
     # Initialize uncertainty-aware diffusion (same interface as base class)
-    diffusion = QUDiffusion(img_size=28, device=device)
+    diffusion = UQDiffusion(img_size=28, device=device)
 
     # Sample to detailed uncertainty information
-    intermediates, uncertainties, covariances = diffusion.sample_with_uncertainty(
-        model=laplace_model,
-        channels=1,
+    # intermediates, uncertainties = diffusion.sample_with_uncertainty(
+    #     model=laplace_model,
+    #     channels=1,
+    # )
+
+    save_dir = "samples"
+
+    plot_image_uncertainty_grid(
+        laplace_model,
+        diffusion,
+        num_intermediate=5,
+        n=5,
+        max_steps=1000,
+        save_dir=save_dir,
+        device=device,
+        num_classes=num_classes,
+        cov_num_sample=100,
     )
+
+    # Display samples grid
+    out_path_img = os.path.join(save_dir, "all_samples_grid.png")
+
+    # Display uncertainties grid
+    out_path_unc = os.path.join(save_dir, "all_uncertainties_grid.png")
 
     # print(intermediates)
     # print(uncertainties)

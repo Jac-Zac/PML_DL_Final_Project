@@ -189,7 +189,9 @@ class UQDiffusion(Diffusion):
         eps_samples = torch.stack(eps_samples, dim=0)  # [S, B, C, H, W]
 
         first_term = 1 / S * torch.sum(x_samples * eps_samples, dim=0)  # [B, C, H, W]
-        second_term = x_mean * (1 / S * torch.sum(eps_samples, dim=0))  # [B, C, H, W]
+        second_term = torch.mean(x_samples, dim=0) * torch.mean(
+            eps_samples, dim=0
+        )  # [B, C, H, W]
 
         return first_term - second_term
 

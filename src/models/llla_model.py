@@ -19,7 +19,7 @@ class LaplaceApproxModel(nn.Module):
         self.conv_out = diff_model.output_conv
 
         # Make a deep copy of the final output layer for deterministic evaluation later
-        self.copied_cov_out = copy.deepcopy(self.conv_out)
+        self.copied_conv_out = copy.deepcopy(self.conv_out)
 
         # Remove the final output layer from the model to use it as a feature extractor
         self.feature_extractor = diff_model
@@ -126,7 +126,7 @@ class LaplaceApproxModel(nn.Module):
         self.feature_extractor.eval()
         with torch.no_grad():
             feats = self.feature_extractor(x, t, y=y)
-            logits = self.copied_cov_out(feats)
+            logits = self.copied_conv_out(feats)
 
         # Reshape logits to image format
         B = x.size(0)

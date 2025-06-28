@@ -63,8 +63,8 @@ class DiffusionMNIST(Dataset):
         noise = torch.randn_like(image)
         x_t = image * a.sqrt() + noise * (1 - a).sqrt()
 
-        # return (image_noised, timestep, label)
-        return x_t, t.squeeze(0), label
+        # return (image_noised, timestep, noise, label)
+        return x_t, t.squeeze(0), noise, label
 
 
 def get_llla_dataloader(

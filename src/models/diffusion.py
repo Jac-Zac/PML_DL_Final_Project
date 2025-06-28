@@ -153,51 +153,15 @@ class UQDiffusion(Diffusion):
         """
         return self._sample_step_with_uncertainty(model, x_t, t, y)
 
-    def _sample_step_with_uncertainty(
-        self,
-        model: nn.Module,
-        x_t: Tensor,
-        t: Tensor,
-        y: Optional[Tensor] = None,
-    ) -> Tensor:
-        """
-        Sampling step with uncertainty estimation.
-        NOTE: we never used this function, dunno if it works or makes sense in any way
-              probably it can be deleted
-
-        """
-        # NOTE: TO REVIEW
-        beta_t = self.beta[t].view(-1, 1, 1, 1)
-        alpha_t = self.alpha[t].view(-1, 1, 1, 1)
-        alpha_bar_t = self.alpha_bar[t].view(-1, 1, 1, 1)
-
-        # Get noise prediction with uncertainty
-        noise_pred, noise_var = model(x_t, t, y=y)
-
-        # Standard diffusion coefficients
-        coef1 = 1.0 / alpha_t.sqrt()
-        coef2 = (1.0 - alpha_t) / (1.0 - alpha_bar_t).sqrt()
-
-        # Compute mean of x_prev
-        x_prev_mean = coef1 * (x_t - coef2 * noise_pred)
-
-        # Add scheduled noise
-        if t[0] > 1:
-            scheduled_noise = torch.randn_like(x_t) * beta_t.sqrt()
-        else:
-            scheduled_noise = torch.zeros_like(x_t)
-
-        x_prev = x_prev_mean + scheduled_noise
-        return x_prev
-
     @torch.no_grad()
     def monte_carlo_covariance_estim(
         self,
+        model: nn.Module,
+        t: Tensor,
         x_mean: Tensor,
         x_var: Tensor,
-        eps_mean: Tensor,
-        eps_var: Tensor,
         S: int = 10,
+        y: Optional[Tensor] = None,
     ) -> Tuple[Tensor, Tensor]:
         """
         Perform Monte Carlo sampling to estimate covariance matrix.
@@ -214,10 +178,12 @@ class UQDiffusion(Diffusion):
         std_x = torch.sqrt(torch.clamp(x_var, min=1e-8))
         x_samples = [x_mean + std_x * torch.randn_like(x_mean) for _ in range(S)]
 
-        std_eps = torch.sqrt(torch.clamp(eps_var, min=1e-8))
-        eps_samples = [
-            eps_mean + std_eps * torch.randn_like(eps_mean) for _ in range(S)
-        ]
+        eps_samples = []
+
+        for i in range(S):
+            eps_mean_i, eps_var_i = model(x_samples[i], t, y=y)
+            std_eps_i = torch.sqrt(torch.clamp(eps_var_i, min=1e-8))
+            eps_samples.append(eps_mean_i + std_eps_i * torch.randn_like(eps_mean_i))
 
         x_samples = torch.stack(x_samples, dim=0)  # [S, B, C, H, W]
         eps_samples = torch.stack(eps_samples, dim=0)  # [S, B, C, H, W]
@@ -274,15 +240,18 @@ class UQDiffusion(Diffusion):
             # Variance
             coef3 = 2 * beta_t / (1 - alpha_bar_t).sqrt()
             coef4 = beta_t**2 / (1 - alpha_bar_t)
-            x_prev_var = coef1 * (x_t_var - coef3 * cov_t + coef4 * eps_var) + beta_t
+            x_prev_var = (
+                1 / alpha_t * (x_t_var - coef3 * cov_t + coef4 * eps_var) + beta_t
+            )
 
             # Covariance estimation with Monte Carlo
             covariance = self.monte_carlo_covariance_estim(
-                x_prev_mean,
-                x_prev_var,
-                eps_mean,
-                eps_var,
+                model=model,
+                t=t,
+                x_mean=x_prev_mean,
+                x_var=x_prev_var,
                 S=cov_num_sample,
+                y=y,
             )
 
             # Log intermediate images

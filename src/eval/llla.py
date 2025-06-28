@@ -1,4 +1,5 @@
 import os
+from types import SimpleNamespace
 
 from src.models.diffusion import UQDiffusion
 from src.models.llla_model import LaplaceApproxModel
@@ -29,9 +30,14 @@ def main():
     # WARNING: This is currently wrong I have to use the Diffusion class perhaps
     # to return a dataloader with images with noise or somehow use directly the functions inside diffusion
 
+    mnist_config = SimpleNamespace()
+    mnist_config.data = SimpleNamespace()
+    mnist_config.data.image_size = 28  # MNIST image size
     # Wrap diffusion model with your Custom Model for Laplace last layer approx
     # NOTE: Automatically call fit
-    laplace_model = LaplaceApproxModel(diff_model, train_loader, args=None, config=None)
+    laplace_model = LaplaceApproxModel(
+        diff_model, train_loader, args=None, config=mnist_config
+    )
 
     print("Laplace fitting completed on last layer of the diffusion model.")
 

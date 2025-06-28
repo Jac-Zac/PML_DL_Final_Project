@@ -158,7 +158,7 @@ class UpBlock(nn.Module):
 class DiffusionUNet(nn.Module):
     """
     U-Net for both diffusion and flow matching models.
-    Time embedding can be either discrete (sinusoidal) or continuous (MLP).
+    Time embedding can be sinusoidal or MLP-based (TimeMLP).
     """
 
     def __init__(
@@ -170,26 +170,23 @@ class DiffusionUNet(nn.Module):
         time_emb_dim: int = 128,
         timesteps: int = 1000,
         num_classes: Optional[int] = None,
-        time_embedding_type: str = "sinusoidal",  # or "mlp"
+        time_embedding_type: str = "sinusoidal",  # "sinusoidal" or "mlp"
     ):
         super().__init__()
         self.timesteps = timesteps
         self.num_classes = num_classes
+        self.time_embedding_type = time_embedding_type
 
         # Choose time embedding type
         if time_embedding_type == "sinusoidal":
             self.time_embed = nn.Sequential(
-                TimeEmbedding(base_channels),  # sinusoidal
+                TimeEmbedding(base_channels),
                 nn.Linear(base_channels, time_emb_dim),
                 nn.SiLU(),
                 nn.Linear(time_emb_dim, time_emb_dim),
             )
         elif time_embedding_type == "mlp":
-            self.time_embed = nn.Sequential(
-                nn.Linear(1, time_emb_dim),
-                nn.SiLU(),
-                nn.Linear(time_emb_dim, time_emb_dim),
-            )
+            self.time_embed = TimeMLP(time_emb_dim)
         else:
             raise ValueError(f"Unknown time embedding type: {time_embedding_type}")
 
@@ -197,6 +194,7 @@ class DiffusionUNet(nn.Module):
         if num_classes is not None:
             self.class_embed = nn.Embedding(num_classes, time_emb_dim)
 
+        # Channel configuration
         self.channels = [base_channels * m for m in channel_multipliers]
 
         self.input_conv = nn.Conv2d(
@@ -227,18 +225,15 @@ class DiffusionUNet(nn.Module):
         t: torch.Tensor,
         y: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        if t.dim() == 1:  # (B,) → (B, 1)
-            t = t.view(-1, 1)
-
-        # Compute time embedding (sinusoidal or MLP-based)
+        # Compute time embedding
         t_emb = self.time_embed(t)
 
-        # Add class embedding if needed
+        # Add class embedding if used
         if self.num_classes is not None and y is not None:
             y_emb = self.class_embed(y)
             t_emb = t_emb + y_emb
 
-        # U-Net forward
+        # U-Net forward pass
         x = self.input_conv(x)
         skips = []
         for down_block in self.down_blocks:

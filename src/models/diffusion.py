@@ -225,9 +225,10 @@ class UQDiffusion(Diffusion):
             # Variance
             coef3 = 2 * beta_t / (1 - alpha_bar_t).sqrt()
             coef4 = beta_t**2 / (1 - alpha_bar_t)
-            x_prev_var = (
-                1 / alpha_t * (x_t_var - coef3 * cov_t + coef4 * eps_var) + beta_t
-            )
+            # x_prev_var = (
+            #     1 / alpha_t * (x_t_var - coef3 * cov_t + coef4 * eps_var) + beta_t
+            # )
+            x_prev_var = 1 / alpha_t * (x_t_var + coef4 * eps_var) + beta_t
 
             if i > 0:
                 # Covariance estimation with Monte Carlo

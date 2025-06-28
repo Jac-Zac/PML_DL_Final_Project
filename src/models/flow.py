@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional, Tuple
 
 import torch
 from torch import Tensor, nn
@@ -118,7 +118,7 @@ class FlowMatching:
         for i in range(steps):
             t = torch.full((batch_size,), i / steps, device=self.device)
             v = model(x_t, t, y=y)  # predicted velocity dx/dt
-            x_t = x_t + v * dt  # Euler integration step
+            x_t = x_t + v * dt  # Euler (explicit) integration step
 
             if log_intermediate and t_sample_times and i in t_sample_times:
                 results.append(self.transform_sampled_image(x_t.clone()))

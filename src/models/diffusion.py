@@ -207,6 +207,7 @@ class UQDiffusion(Diffusion):
 
             # Predict noise and its variance
             eps_mean, eps_var = model(x_t, t, y=y)  # mean and variance of noise
+            eps_t = eps_mean + torch.sqrt(eps_var) * torch.randn_like(eps_mean)
 
             # Compute xt-1
             beta_t = self.beta[t].view(-1, 1, 1, 1)
@@ -218,7 +219,7 @@ class UQDiffusion(Diffusion):
             coef2 = (1.0 - alpha_t) / (1.0 - alpha_bar_t).sqrt()
             x_prev_mean = coef1 * (x_t_mean - coef2 * eps_mean)
             x_prev = (
-                coef1 * (x_t - coef2 * eps_mean) + torch.randn_like(x_t) * beta_t.sqrt()
+                coef1 * (x_t - coef2 * eps_t) + torch.randn_like(x_t) * beta_t.sqrt()
             )
 
             # Variance

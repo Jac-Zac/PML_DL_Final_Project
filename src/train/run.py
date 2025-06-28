@@ -38,7 +38,13 @@ def main():
     train_loader, val_loader = get_dataloaders(batch_size=args.batch_size)
 
     # HACK: Hard-coded number of classes (MNIST = 10)
-    model_kwargs = {"num_classes": 10}
+    model_kwargs = {
+        "num_classes": 10,
+        "out_channels": 1,
+        "time_emb_dim": 128,
+        # NOTE: Change time embedding to learned for flow which is more sensible
+        "time_embedding_type": "mlp" if args.method == "flow" else "sinusoidal",
+    }
 
     _ = train(
         num_epochs=args.epochs,

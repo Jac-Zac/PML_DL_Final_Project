@@ -31,6 +31,20 @@ class TimeEmbedding(nn.Module):
         return emb  # Shape: (batch_size, dim)
 
 
+# --- Learned Time Embedding ---
+class TimeMLP(nn.Module):
+    def __init__(self, time_emb_dim):
+        super().__init__()
+        self.mlp = nn.Sequential(
+            nn.Linear(1, time_emb_dim),
+            nn.SiLU(),
+            nn.Linear(time_emb_dim, time_emb_dim),
+        )
+
+    def forward(self, t: torch.Tensor) -> torch.Tensor:
+        return self.mlp(t[:, None])  # shape: (B, 1) → (B, time_emb_dim)
+
+
 class DoubleConv(nn.Module):
     """
     Double convolutional block with GroupNorm and SiLU activation.
@@ -143,8 +157,8 @@ class UpBlock(nn.Module):
 
 class DiffusionUNet(nn.Module):
     """
-    U-Net architecture designed for diffusion models.
-    Supports optional class conditioning and FiLM conditioning via time embeddings.
+    U-Net for both diffusion and flow matching models.
+    Time embedding can be either discrete (sinusoidal) or continuous (MLP).
     """
 
     def __init__(
@@ -155,83 +169,86 @@ class DiffusionUNet(nn.Module):
         channel_multipliers: List[int] = [1, 2, 4],
         time_emb_dim: int = 128,
         timesteps: int = 1000,
-        num_classes: Optional[int] = None,  # Optional class conditioning
+        num_classes: Optional[int] = None,
+        time_embedding_type: str = "sinusoidal",  # or "mlp"
     ):
         super().__init__()
         self.timesteps = timesteps
         self.num_classes = num_classes
 
-        # Time embedding: map discrete timestep to high-dimensional embedding
-        self.time_embed = nn.Sequential(
-            TimeEmbedding(base_channels),
-            nn.Linear(base_channels, time_emb_dim),
-            nn.SiLU(),
-            nn.Linear(time_emb_dim, time_emb_dim),
-        )
+        # Choose time embedding type
+        if time_embedding_type == "sinusoidal":
+            self.time_embed = nn.Sequential(
+                TimeEmbedding(base_channels),  # sinusoidal
+                nn.Linear(base_channels, time_emb_dim),
+                nn.SiLU(),
+                nn.Linear(time_emb_dim, time_emb_dim),
+            )
+        elif time_embedding_type == "mlp":
+            self.time_embed = nn.Sequential(
+                nn.Linear(1, time_emb_dim),
+                nn.SiLU(),
+                nn.Linear(time_emb_dim, time_emb_dim),
+            )
+        else:
+            raise ValueError(f"Unknown time embedding type: {time_embedding_type}")
 
-        # Class embedding if using conditional diffusion
+        # Optional class embedding
         if num_classes is not None:
             self.class_embed = nn.Embedding(num_classes, time_emb_dim)
 
-        # Compute channels per layer based on multipliers
         self.channels = [base_channels * m for m in channel_multipliers]
 
-        # Initial conv layer to project input to base channel size
         self.input_conv = nn.Conv2d(
             in_channels, self.channels[0], kernel_size=3, padding=1
         )
 
-        # Create encoder blocks (DownBlocks)
         self.down_blocks = nn.ModuleList()
         for i in range(len(self.channels) - 1):
             self.down_blocks.append(DownBlock(self.channels[i], self.channels[i + 1]))
 
-        # Bottleneck double conv at the bottom of the U-Net
         self.bottleneck = DoubleConv(self.channels[-1], self.channels[-1])
 
-        # Create decoder blocks (UpBlocks) with FiLM conditioning
-        self.up_blocks = nn.ModuleList()
         reversed_channels = list(reversed(self.channels))
         skip_channels = list(reversed(self.channels[1:]))
 
+        self.up_blocks = nn.ModuleList()
         for i in range(len(skip_channels)):
             in_ch = reversed_channels[i]
             skip_ch = skip_channels[i]
             out_ch = reversed_channels[i + 1]
             self.up_blocks.append(UpBlock(in_ch, skip_ch, out_ch, time_emb_dim))
 
-        # Final output conv layer (1x1 conv to reduce to desired output channels)
         self.output_conv = nn.Conv2d(self.channels[0], out_channels, kernel_size=1)
 
     def forward(
         self,
         x: torch.Tensor,
         t: torch.Tensor,
-        y: Optional[torch.Tensor] = None,  # Optional class label conditioning
+        y: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        # Get time embedding
+        if t.dim() == 1:  # (B,) → (B, 1)
+            t = t.view(-1, 1)
+
+        # Compute time embedding (sinusoidal or MLP-based)
         t_emb = self.time_embed(t)
 
-        # Add class embedding if available (class conditional)
+        # Add class embedding if needed
         if self.num_classes is not None and y is not None:
             y_emb = self.class_embed(y)
-            # Combine time and class embeddings via addition (broadcastable)
             t_emb = t_emb + y_emb
 
-        # Encoder path with skip connections
+        # U-Net forward
         x = self.input_conv(x)
         skips = []
         for down_block in self.down_blocks:
             x, skip = down_block(x)
             skips.append(skip)
 
-        # Bottleneck conv
         x = self.bottleneck(x)
 
-        # Decoder path: upsample and use FiLM conditioning
         for up_block in self.up_blocks:
-            skip = skips.pop()  # Retrieve skip connection in reverse order
+            skip = skips.pop()
             x = up_block(x, skip, t_emb)
 
-        # Final output projection
         return self.output_conv(x)

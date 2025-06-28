@@ -118,11 +118,6 @@ class UQDiffusion(Diffusion):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def sample_from_gaussian(self, mean: Tensor, var: Tensor) -> Tensor:
-        """Sample from Gaussian distribution with given mean and variance."""
-        std = torch.sqrt(torch.clamp(var, min=1e-8))
-        return mean + std * torch.randn_like(mean)
-
     def perform_training_step(
         self,
         model: nn.Module,
@@ -141,19 +136,6 @@ class UQDiffusion(Diffusion):
         return self.loss_simple(noise, noise_pred)
 
     @torch.no_grad()
-    def sample_step(
-        self,
-        model: nn.Module,
-        x_t: Tensor,
-        t: Tensor,
-        y: Optional[Tensor] = None,
-    ) -> Tensor:
-        """
-        Override sample_step to optionally include uncertainty.
-        """
-        return self._sample_step_with_uncertainty(model, x_t, t, y)
-
-    @torch.no_grad()
     def monte_carlo_covariance_estim(
         self,
         model: nn.Module,
@@ -162,7 +144,7 @@ class UQDiffusion(Diffusion):
         x_var: Tensor,
         S: int = 10,
         y: Optional[Tensor] = None,
-    ) -> Tuple[Tensor, Tensor]:
+    ) -> Tensor:
         """
         Perform Monte Carlo sampling to estimate covariance matrix.
         Args:
@@ -204,7 +186,7 @@ class UQDiffusion(Diffusion):
         log_intermediate: bool = True,
         y: Optional[Tensor] = None,
         cov_num_sample: int = 10,
-    ) -> Tuple[List[Tensor], List[Tensor], Optional[List[Tensor]]]:
+    ) -> Tuple[List[Tensor], Tensor]:
         """
         Iteratively sample from the model, tracking predictive uncertainty and optionally Cov(x, ε).
         """
@@ -271,27 +253,3 @@ class UQDiffusion(Diffusion):
 
         model.train()
         return intermediates, uncertainties
-
-    @torch.no_grad()
-    def sample(
-        self,
-        model: nn.Module,
-        t_sample_times: Optional[List[int]] = None,
-        channels: int = 1,
-        log_intermediate: bool = False,
-        y: Optional[Tensor] = None,
-    ) -> Tuple[List[Tensor], List[Tensor]]:
-        """
-        Override sample method to optionally use uncertainty.
-
-        If uncertainty_schedule is provided, uses uncertainty sampling,
-        otherwise falls back to deterministic sampling for backward compatibility.
-        """
-        intermediates, _, _ = self.sample_with_uncertainty(
-            model=model,
-            t_sample_times=t_sample_times,
-            channels=channels,
-            log_intermediate=log_intermediate,
-            y=y,
-        )
-        return intermediates

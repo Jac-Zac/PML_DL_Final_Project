@@ -34,6 +34,8 @@ class TimeMLP(nn.Module):
         )
 
     def forward(self, t: torch.Tensor) -> torch.Tensor:
+        # HACK: Convert to float for mlp time-embedding to make it work with MPS on mac
+        t = t.float()  # Ensure float input for MLP
         return self.mlp(t[:, None])  # Expand shape to [B, 1]
 
 
@@ -155,7 +157,7 @@ class UpBlock(nn.Module):
         return self.double_conv(x, gamma1, beta1, gamma2, beta2)
 
 
-class DiffusionUNet(nn.Module):
+class UNet(nn.Module):
     """
     U-Net with FiLM-based time conditioning, usable for diffusion or flow-matching models.
     """
@@ -224,7 +226,6 @@ class DiffusionUNet(nn.Module):
         self, x: torch.Tensor, t: torch.Tensor, y: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
         # Compute time embedding (and optionally class embedding)
-        t = t.float()
         t_emb = self.time_embed(t)
         if self.num_classes is not None and y is not None:
             t_emb = t_emb + self.class_embed(y)

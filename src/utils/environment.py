@@ -7,14 +7,14 @@ import numpy as np
 import torch
 
 import wandb
-from src.models.unet import DiffusionUNet
+from src.models.unet import UNet
 
 # Import other models here as needed
 logger = logging.getLogger(__name__)
 
 # Centralized model registry dictionary
 MODEL_REGISTRY = {
-    "unet": DiffusionUNet,
+    "unet": UNet,
     # "dvit": DiffusionDVit,
     # Add more models here
 }

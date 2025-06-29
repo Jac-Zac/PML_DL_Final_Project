@@ -181,12 +181,10 @@ class UQFlowMatching(FlowMatching):
 
         x_samples = torch.stack(x_samples, dim=0)  # [S, B, C, H, W]
         v_samples = torch.stack(v_samples, dim=0)  # [S, B, C, H, W]
-
         first_term = 1 / S * torch.sum(x_samples * v_samples, dim=0)  # [B, C, H, W]
         second_term = torch.mean(x_samples, dim=0) * torch.mean(
             v_samples, dim=0
         )  # [B, C, H, W]
-
         return first_term - second_term
 
     @torch.no_grad()
@@ -221,13 +219,8 @@ class UQFlowMatching(FlowMatching):
         intermediates, uncertainties = [], []
 
         dt = 1.0 / num_steps
-        intermediates = []
-        uncertainties = []
-
         for i in range(num_steps):
-            t = torch.full(
-                (batch_size,), i * dt, device=self.device, dtype=torch.float32
-            )
+            t = torch.full((batch_size,), i * dt, device=self.device, dtype=torch.long)
 
             #################################
             # Predict noise and its variance
@@ -241,31 +234,43 @@ class UQFlowMatching(FlowMatching):
 
             # Variance
             x_succ_var = x_t_var + dt**2 * v_var + 2 * dt * cov_t
-            # x_succ_var = x_t_var + dt**2 * v_var  # + 2 * dt * cov_t
 
-            if i != 0:
-                # Covariance estimation with Monte Carlo
-                covariance = self.monte_carlo_covariance_estim(
-                    model=model,
-                    t=t + dt,
-                    x_mean=x_succ_mean,
-                    x_var=x_succ_var,
-                    S=cov_num_sample,
-                    y=y,
-                )
+            # Covariance estimation with Monte Carlo
+            covariance = self.monte_carlo_covariance_estim(
+                model=model,
+                t=t + dt,
+                x_mean=x_succ_mean,
+                x_var=x_succ_var,
+                S=cov_num_sample,
+                y=y,
+            )
+
+            print(f"\nStep {i}")
+            print("v_var mean:", v_var.mean().item(), "std:", v_var.std().item())
+            print(
+                "covariance mean:",
+                covariance.mean().item(),
+                "std:",
+                covariance.std().item(),
+            )
+            print("x_t_var mean:", x_t_var.mean().item(), "std:", x_t_var.std().item())
+            print(
+                "x_succ_var mean:",
+                x_succ_var.mean().item(),
+                "std:",
+                x_succ_var.std().item(),
+            )
 
             # Log intermediate images
             # if log_intermediate and t_sample_times and i in t_sample_times:
             intermediates.append(self.transform_sampled_image(x_t.clone()))
-            # per-pixel variance
-            uncertainties.append(x_t_var.clone().cpu())
+            uncertainties.append(x_t_var.clone().cpu())  # per-pixel variance
 
             x_t = x_succ
             x_t_mean = x_succ_mean
             x_t_var = x_succ_var
             cov_t = covariance
 
-        # intermediates = torch.stack(intermediates)  # [num_steps, B, C, H, W]
         uncertainties = torch.stack(uncertainties)  # [num_steps, B, C, H, W]
 
         model.train()

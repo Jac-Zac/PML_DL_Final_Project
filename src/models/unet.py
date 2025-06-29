@@ -224,6 +224,7 @@ class DiffusionUNet(nn.Module):
         self, x: torch.Tensor, t: torch.Tensor, y: Optional[torch.Tensor] = None
     ) -> torch.Tensor:
         # Compute time embedding (and optionally class embedding)
+        t = t.float()
         t_emb = self.time_embed(t)
         if self.num_classes is not None and y is not None:
             t_emb = t_emb + self.class_embed(y)

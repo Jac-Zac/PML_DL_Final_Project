@@ -102,7 +102,7 @@ def plot_image_uncertainty_grid(
     method_instance,
     n: int,
     num_intermediate: int,
-    max_steps: int,
+    total_steps: int,
     save_dir: str,
     device: torch.device,
     num_classes: int,
@@ -117,7 +117,7 @@ def plot_image_uncertainty_grid(
         method_instance: The sampling method instance (Diffusion or FlowMatching).
         n (int): Number of classes from which to generate ([0,1,..,n-1]).
         num_intermediate (int): Number of intermediate steps to visualize.
-        max_steps (int): Maximum number of steps or timesteps.
+        total_steps (int): Maximum number of steps or timesteps.
         save_dir (str): Directory to save the output image.
         device: Torch device.
         num_classes (int): Number of classes for label conditioning.
@@ -126,72 +126,84 @@ def plot_image_uncertainty_grid(
     y = torch.arange(n, device=device) % num_classes
 
     # Decide which type of timesteps to generate
-    # if method_instance.__class__.__name__ == "FlowMatching":
-    #     # Flow matching: choose indices between 0 and (steps-1)
-    #     step_indices = torch.linspace(
-    #         0, max_steps - 1, steps=num_intermediate, dtype=torch.int32
-    #     ).tolist()
+    if method_instance.__class__.__name__ == "UQFlowMatching":
+        # Flow matching: choose indices between 0 and (steps-1)
+        # step_indices = torch.linspace(
+        #     0, total_steps, steps=num_intermediate, dtype=torch.int32
+        # ).tolist()
+        # print("Flow: step indices", step_indices)
 
-    #     all_samples_grouped = method_instance.sample(
-    #         model,
-    #         steps=max_steps,
-    #         log_intermediate=True,
-    #         t_sample_times=step_indices,
-    #         y=y,
-    #     )
-    #     timesteps = step_indices
-    # else:
-    # Diffusion: choose timesteps between max_steps and 0
-    t_sample_times = torch.linspace(
-        max_steps - 1,
-        0,
-        steps=num_intermediate,
-        dtype=torch.int32,
-    ).tolist()
-    print("sample times", t_sample_times)
+        all_samples_grouped, uncertainties = method_instance.sample_with_uncertainty(
+            model,
+            log_intermediate=True,
+            y=y,
+            cov_num_sample=cov_num_sample,
+            num_steps=total_steps,
+        )
+        # timesteps = step_indices
+        print("Flow: samples shape is ", len(all_samples_grouped))
+        print("num steps (should be equal to timesteps): ", total_steps)
+        num_intermediate = total_steps
+    else:
+        # Diffusion: choose timesteps between total_steps and 0
+        t_sample_times = torch.linspace(
+            total_steps - 1,
+            0,
+            steps=num_intermediate,
+            dtype=torch.int32,
+        ).tolist()
+        print("Diffusion: sample times ", t_sample_times)
 
-    all_samples_grouped, uncertainties = method_instance.sample_with_uncertainty(
-        model,
-        t_sample_times=t_sample_times,
-        log_intermediate=True,
-        y=y,
-        cov_num_sample=cov_num_sample,
-    )
-    timesteps = t_sample_times
+        all_samples_grouped, uncertainties = method_instance.sample_with_uncertainty(
+            model,
+            t_sample_times=t_sample_times,
+            log_intermediate=True,
+            y=y,
+            cov_num_sample=cov_num_sample,
+        )
+        timesteps = t_sample_times
 
     ### ------------------ Plot images grid ------------------ ###
 
     # Stack all generated images into a (B, T, C, H, W) tensor
-    stacked = torch.stack(all_samples_grouped)  # (T, B, C, H, W)
+    print("samples length: ", len(all_samples_grouped))
+    stacked = torch.stack(
+        all_samples_grouped
+    )  # (T, B, C, H, W) (list of samples -> tensor of samples)
     permuted = stacked.permute(1, 0, 2, 3, 4)  # (B, T, C, H, W)
-    num_samples, num_timesteps = permuted.shape[:2]  # extract B and T
-    print("num timesteps", num_timesteps)
+    num_classes, num_timesteps = permuted.shape[
+        :2
+    ]  # extract B (length of y) and T (number of saved timesteps)
+    print("num timesteps: ", num_timesteps)
 
     # Save as a grid
     os.makedirs(save_dir, exist_ok=True)
     out_path_img = os.path.join(save_dir, "all_samples_grid.png")
 
     fig, axes = plt.subplots(
-        num_samples,
+        num_classes,
         num_intermediate,
-        figsize=(1.5 * num_intermediate, 1.5 * num_samples),
+        figsize=(1.5 * num_intermediate, 1.5 * num_classes),
     )
 
-    if num_samples == 1:
+    if num_classes == 1:
         axes = np.expand_dims(axes, 0)
     if num_intermediate == 1:
         axes = np.expand_dims(axes, 1)
 
-    indices = np.linspace(0, num_timesteps - 1, num=num_intermediate, dtype=int)
+    indices = np.linspace(
+        0, num_timesteps - 1, num=num_intermediate, dtype=int
+    )  # last value is included
+    print("indices: ", indices)
 
-    for row in range(num_samples):
+    for row in range(num_classes):
         for idx, col in enumerate(indices):
             img = permuted[row, col].squeeze().cpu().numpy()
             ax = axes[row, col]
             ax.imshow(img, cmap="gray")
             ax.axis("off")
             if row == 0:
-                ax.set_title(f"step={timesteps[col]}", fontsize=10)
+                ax.set_title(f"step={indices[col]}", fontsize=10)
             if col == 0:
                 ax.set_ylabel(f"Sample {row+1}", fontsize=10)
 
@@ -205,33 +217,49 @@ def plot_image_uncertainty_grid(
     if isinstance(uncertainties, list):
         uncertainties = torch.stack(uncertainties)  # (T, B, C, H, W)
 
+    # Multiplier
+    mult = 700
+
     # Ensure uncertainties has same ordering: (B, T, C, H, W)
-    uncertainties_permuted = uncertainties.permute(1, 0, 2, 3, 4)
+    uncertainties_permuted = uncertainties.permute(1, 0, 2, 3, 4) * mult
 
     out_path_unc = os.path.join(save_dir, "all_uncertainties_grid.png")
 
     fig, axes = plt.subplots(
-        num_samples,
+        num_classes,
         num_intermediate,
-        figsize=(1.5 * num_intermediate, 1.5 * num_samples),
+        figsize=(1.5 * num_intermediate, 1.5 * num_classes),
     )
 
-    if num_samples == 1:
+    if num_classes == 1:
         axes = np.expand_dims(axes, 0)
     if num_intermediate == 1:
         axes = np.expand_dims(axes, 1)
 
-    for row in range(num_samples):
-        for col in range(num_intermediate):
-            unc = uncertainties_permuted[row, col].squeeze().cpu().numpy()
+    for row in range(num_classes):
+        for idx, col in enumerate(indices):
+            img = uncertainties_permuted[row, col].squeeze().cpu().numpy()
             ax = axes[row, col]
-            im = ax.imshow(unc, cmap=uq_cmp)  # Heatmap for uncertainty
+            ax.imshow(img, cmap=uq_cmp)
             ax.axis("off")
             if row == 0:
-                ax.set_title(f"step={timesteps[col]}", fontsize=10)
+                ax.set_title(f"step={indices[col]}", fontsize=10)
             if col == 0:
                 ax.set_ylabel(f"Sample {row+1}", fontsize=10)
+
+    # for row in range(num_classes):
+    #     for col in range(num_intermediate):
+    #         unc = uncertainties_permuted[row, col].squeeze().cpu().numpy()
+    #         ax = axes[row, col]
+    #         im = ax.imshow(unc, cmap=uq_cmp)  # Heatmap for uncertainty
+    #         ax.axis("off")
+    #         if row == 0:
+    #             ax.set_title(f"step={timesteps[col]}", fontsize=10)
+    #         if col == 0:
+    #             ax.set_ylabel(f"Sample {row+1}", fontsize=10)
 
     plt.tight_layout()
     plt.savefig(out_path_unc, bbox_inches="tight")
     plt.close()
+
+    return all_samples_grouped, uncertainties

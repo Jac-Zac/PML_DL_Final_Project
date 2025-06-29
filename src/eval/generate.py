@@ -56,6 +56,8 @@ def main():
     model_kwargs = {
         "num_classes": num_classes,
         "time_emb_dim": 128,
+        # NOTE: Change time embedding to learned for flow which is more sensible
+        "time_embedding_type": "mlp" if args.method == "flow" else "sinusoidal",
     }
 
     # Load pretrained model
@@ -75,6 +77,7 @@ def main():
         from src.models.flow import FlowMatching
 
         method_instance = FlowMatching(img_size=28, device=device)
+        args.max_steps = 10
 
     plot_image_grid(
         model,

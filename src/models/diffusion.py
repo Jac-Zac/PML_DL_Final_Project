@@ -156,24 +156,15 @@ class UQDiffusion(Diffusion):
             mc_mean: Empirical mean of samples.
             mc_var: Empirical pixel-wise variance of samples.
         """
-
         std_x = torch.sqrt(torch.clamp(x_var, min=1e-8))
         x_samples = [x_mean + std_x * torch.randn_like(x_mean) for _ in range(S)]
-
-        eps_samples = []
-
-        for i in range(S):
-            eps_mean_i, eps_var_i = model(x_samples[i], t, y=y)
-            std_eps_i = torch.sqrt(torch.clamp(eps_var_i, min=1e-8))
-            eps_samples.append(eps_mean_i + std_eps_i * torch.randn_like(eps_mean_i))
+        eps = [model.accurate_forward(x_i, t, y=y) for x_i in x_samples]
 
         x_samples = torch.stack(x_samples, dim=0)  # [S, B, C, H, W]
-        eps_samples = torch.stack(eps_samples, dim=0)  # [S, B, C, H, W]
+        eps = torch.stack(eps, dim=0)  # [S, B, C, H, W]
 
-        first_term = 1 / S * torch.sum(x_samples * eps_samples, dim=0)  # [B, C, H, W]
-        second_term = torch.mean(x_samples, dim=0) * torch.mean(
-            eps_samples, dim=0
-        )  # [B, C, H, W]
+        first_term = torch.mean(x_samples * eps, dim=0)  # [B, C, H, W]
+        second_term = x_mean * torch.mean(eps, dim=0)  # [B, C, H, W]
 
         return first_term - second_term
 
@@ -196,6 +187,7 @@ class UQDiffusion(Diffusion):
         x_t = torch.randn(
             batch_size, channels, self.img_size, self.img_size, device=self.device
         )
+
         x_t_mean = x_t.clone()
         x_t_var = torch.zeros_like(x_t)
         cov_t = torch.zeros_like(x_t)
@@ -223,12 +215,15 @@ class UQDiffusion(Diffusion):
             )
 
             # Variance
-            coef3 = 2 * beta_t / (1 - alpha_bar_t).sqrt()
-            coef4 = beta_t**2 / (1 - alpha_bar_t)
-            # x_prev_var = (
-            #     1 / alpha_t * (x_t_var - coef3 * cov_t + coef4 * eps_var) + beta_t
-            # )
-            x_prev_var = 1 / alpha_t * (x_t_var + coef4 * eps_var) + beta_t
+            coef3 = 2 * (1 - alpha_t) / alpha_t * (1 - alpha_bar_t).sqrt()
+            coef4 = (1 - alpha_t) ** 2 / alpha_t * (1 - alpha_bar_t)
+            x_prev_var = (
+                (1 / alpha_t * x_t_var)
+                - (coef3 * cov_t)
+                + (coef4 * eps_var)
+                + beta_t
+                # (1 / alpha_t * x_t_var) + (coef4 * eps_var) + beta_t
+            )
 
             if i > 0:
                 # Covariance estimation with Monte Carlo
@@ -239,6 +234,22 @@ class UQDiffusion(Diffusion):
                     x_var=x_prev_var,
                     S=cov_num_sample,
                     y=y,
+                )
+
+            if i % 100 == 0 or i == self.noise_steps - 1:
+                print(f"\nStep {i}")
+                print(
+                    f"  eps_var mean: {eps_var.mean().item():.4e}, std: {eps_var.std().item():.4e}"
+                )
+                if i > 0:
+                    print(
+                        f"  Covariance mean: {covariance.mean().item():.4e}, std: {covariance.std().item():.4e}"
+                    )
+                print(
+                    f"  x_t_var mean: {x_t_var.mean().item():.4e}, std: {x_t_var.std().item():.4e}"
+                )
+                print(
+                    f"  x_prev_var mean: {x_prev_var.mean().item():.4e}, std: {x_prev_var.std().item():.4e}"
                 )
 
             # Log intermediate images

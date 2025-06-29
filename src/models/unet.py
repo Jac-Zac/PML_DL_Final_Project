@@ -8,27 +8,17 @@ import torch.nn.functional as F
 
 # --- Sinusoidal Time Embedding ---
 class TimeEmbedding(nn.Module):
-    """
-    Creates sinusoidal embeddings for discrete timesteps (used in diffusion models).
-    This is similar to positional encoding in transformers, encoding time step t as sinusoids.
-    """
-
     def __init__(self, dim: int):
         super().__init__()
-        self.dim = dim  # Dimension of the output embedding
+        self.dim = dim
 
     def forward(self, t: torch.Tensor) -> torch.Tensor:
-        # Compute sinusoidal positional embedding for timesteps t
         half_dim = self.dim // 2
-        # Compute scale factor for frequencies
         scale = math.log(10000) / (half_dim - 1)
-        # Generate frequency terms exponentially spaced
         freqs = torch.exp(torch.arange(half_dim, device=t.device) * -scale)
-        # Shape (B, half_dim), multiply each timestep by frequencies
         emb = t[:, None] * freqs[None, :]
-        # Concatenate sin and cos embeddings (shape B x dim)
         emb = torch.cat([emb.sin(), emb.cos()], dim=-1)
-        return emb  # Shape: (batch_size, dim)
+        return emb
 
 
 # --- Learned Time Embedding ---
@@ -42,33 +32,24 @@ class TimeMLP(nn.Module):
         )
 
     def forward(self, t: torch.Tensor) -> torch.Tensor:
-        return self.mlp(t[:, None])  # shape: (B, 1) → (B, time_emb_dim)
+        return self.mlp(t[:, None])
 
 
 class DoubleConv(nn.Module):
-    """
-    Double convolutional block with GroupNorm and SiLU activation.
-    Supports FiLM conditioning by applying gamma (scale) and beta (shift) parameters after normalization.
-    """
-
     def __init__(
         self, in_channels: int, out_channels: int, mid_channels: Optional[int] = None
     ):
         super().__init__()
-        # If mid_channels not provided, use out_channels
         if mid_channels is None:
             mid_channels = out_channels
 
-        # Set number of groups for GroupNorm, min(8, channels)
         groups = min(8, out_channels) if out_channels >= 8 else out_channels
         mid_groups = min(8, mid_channels) if mid_channels >= 8 else mid_channels
 
-        # First conv block
         self.conv1 = nn.Conv2d(in_channels, mid_channels, kernel_size=3, padding=1)
         self.norm1 = nn.GroupNorm(mid_groups, mid_channels)
         self.act1 = nn.SiLU()
 
-        # Second conv block
         self.conv2 = nn.Conv2d(mid_channels, out_channels, kernel_size=3, padding=1)
         self.norm2 = nn.GroupNorm(groups, out_channels)
         self.act2 = nn.SiLU()
@@ -81,19 +62,14 @@ class DoubleConv(nn.Module):
         gamma2: Optional[torch.Tensor] = None,
         beta2: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        # First conv + norm
         x = self.conv1(x)
         x = self.norm1(x)
-        # Apply FiLM conditioning if provided
         if gamma1 is not None and beta1 is not None:
-            # gamma and beta shape (B, C), unsqueeze to (B, C, 1, 1) for broadcast
             x = gamma1[:, :, None, None] * x + beta1[:, :, None, None]
         x = self.act1(x)
 
-        # Second conv + norm
         x = self.conv2(x)
         x = self.norm2(x)
-        # Apply FiLM conditioning if provided
         if gamma2 is not None and beta2 is not None:
             x = gamma2[:, :, None, None] * x + beta2[:, :, None, None]
         x = self.act2(x)
@@ -102,37 +78,55 @@ class DoubleConv(nn.Module):
 
 
 class DownBlock(nn.Module):
-    """
-    Downsampling block: applies double conv, then max-pooling.
-    Returns both downsampled output and skip connection.
-    """
-
-    def __init__(self, in_channels: int, out_channels: int):
+    def __init__(self, in_channels: int, out_channels: int, time_emb_dim: int):
         super().__init__()
+        self.use_film = time_emb_dim is not None
         self.conv = DoubleConv(in_channels, out_channels)
-        self.pool = nn.MaxPool2d(2)  # Downsamples by factor of 2
+        self.pool = nn.MaxPool2d(2)
+        if self.use_film:
+            self.film_mlp = nn.Sequential(
+                nn.SiLU(),
+                nn.Linear(time_emb_dim, out_channels * 4),
+            )
 
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        skip = self.conv(x)  # Save for skip connection in U-Net
-        down = self.pool(skip)  # Downsample spatially
+    def forward(self, x: torch.Tensor, time_emb: Optional[torch.Tensor] = None):
+        if self.use_film and time_emb is not None:
+            film_params = self.film_mlp(time_emb)
+            gamma1, beta1, gamma2, beta2 = torch.chunk(film_params, 4, dim=1)
+            skip = self.conv(x, gamma1, beta1, gamma2, beta2)
+        else:
+            skip = self.conv(x)
+        down = self.pool(skip)
         return down, skip
 
 
-class UpBlock(nn.Module):
-    """
-    Upsampling block with FiLM conditioning from time embedding.
-    Upsamples input, concatenates skip connection, applies FiLM-conditioned double conv.
-    """
+class Bottleneck(nn.Module):
+    def __init__(self, channels: int, time_emb_dim: int):
+        super().__init__()
+        self.use_film = time_emb_dim is not None
+        self.conv = DoubleConv(channels, channels)
+        if self.use_film:
+            self.film_mlp = nn.Sequential(
+                nn.SiLU(),
+                nn.Linear(time_emb_dim, channels * 4),
+            )
 
+    def forward(self, x: torch.Tensor, time_emb: Optional[torch.Tensor] = None):
+        if self.use_film and time_emb is not None:
+            film_params = self.film_mlp(time_emb)
+            gamma1, beta1, gamma2, beta2 = torch.chunk(film_params, 4, dim=1)
+            return self.conv(x, gamma1, beta1, gamma2, beta2)
+        else:
+            return self.conv(x)
+
+
+class UpBlock(nn.Module):
     def __init__(
         self, in_channels: int, skip_channels: int, out_channels: int, time_emb_dim: int
     ):
         super().__init__()
-        total_in = in_channels + skip_channels  # channels after concat
+        total_in = in_channels + skip_channels
         self.double_conv = DoubleConv(total_in, out_channels)
-
-        # MLP to predict FiLM parameters gamma and beta for both conv layers
-        # Each of the 2 conv layers requires gamma and beta => 4 * out_channels
         self.film_mlp = nn.Sequential(
             nn.SiLU(),
             nn.Linear(time_emb_dim, out_channels * 4),
@@ -141,26 +135,14 @@ class UpBlock(nn.Module):
     def forward(
         self, x: torch.Tensor, skip: torch.Tensor, time_emb: torch.Tensor
     ) -> torch.Tensor:
-        # Upsample x to spatial size of skip connection
         x = F.interpolate(x, size=skip.shape[2:], mode="bilinear", align_corners=False)
-        # Concatenate skip features along channel dim
         x = torch.cat([x, skip], dim=1)
-
-        # Get FiLM params from time embedding
-        film_params = self.film_mlp(time_emb)  # shape (B, out_channels*4)
-        # Split into gamma1, beta1, gamma2, beta2 each of shape (B, out_channels)
+        film_params = self.film_mlp(time_emb)
         gamma1, beta1, gamma2, beta2 = torch.chunk(film_params, 4, dim=1)
-
-        # Apply double conv with FiLM conditioning
         return self.double_conv(x, gamma1, beta1, gamma2, beta2)
 
 
 class DiffusionUNet(nn.Module):
-    """
-    U-Net for both diffusion and flow matching models.
-    Time embedding can be sinusoidal or MLP-based (TimeMLP).
-    """
-
     def __init__(
         self,
         in_channels: int = 1,
@@ -177,7 +159,6 @@ class DiffusionUNet(nn.Module):
         self.num_classes = num_classes
         self.time_embedding_type = time_embedding_type
 
-        # Choose time embedding type
         if time_embedding_type == "sinusoidal":
             self.time_embed = nn.Sequential(
                 TimeEmbedding(base_channels),
@@ -190,11 +171,9 @@ class DiffusionUNet(nn.Module):
         else:
             raise ValueError(f"Unknown time embedding type: {time_embedding_type}")
 
-        # Optional class embedding
         if num_classes is not None:
             self.class_embed = nn.Embedding(num_classes, time_emb_dim)
 
-        # Channel configuration
         self.channels = [base_channels * m for m in channel_multipliers]
 
         self.input_conv = nn.Conv2d(
@@ -203,9 +182,11 @@ class DiffusionUNet(nn.Module):
 
         self.down_blocks = nn.ModuleList()
         for i in range(len(self.channels) - 1):
-            self.down_blocks.append(DownBlock(self.channels[i], self.channels[i + 1]))
+            self.down_blocks.append(
+                DownBlock(self.channels[i], self.channels[i + 1], time_emb_dim)
+            )
 
-        self.bottleneck = DoubleConv(self.channels[-1], self.channels[-1])
+        self.bottleneck = Bottleneck(self.channels[-1], time_emb_dim)
 
         reversed_channels = list(reversed(self.channels))
         skip_channels = list(reversed(self.channels[1:]))
@@ -225,22 +206,17 @@ class DiffusionUNet(nn.Module):
         t: torch.Tensor,
         y: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        # Compute time embedding
         t_emb = self.time_embed(t)
-
-        # Add class embedding if used
         if self.num_classes is not None and y is not None:
-            y_emb = self.class_embed(y)
-            t_emb = t_emb + y_emb
+            t_emb = t_emb + self.class_embed(y)
 
-        # U-Net forward pass
         x = self.input_conv(x)
         skips = []
         for down_block in self.down_blocks:
-            x, skip = down_block(x)
+            x, skip = down_block(x, t_emb)
             skips.append(skip)
 
-        x = self.bottleneck(x)
+        x = self.bottleneck(x, t_emb)
 
         for up_block in self.up_blocks:
             skip = skips.pop()

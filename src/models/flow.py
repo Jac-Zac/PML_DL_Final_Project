@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 
 import torch
 from torch import Tensor, nn
@@ -189,12 +189,11 @@ class UQFlowMatching(FlowMatching):
     def sample_with_uncertainty(
         self,
         model: nn.Module,
-        t_sample_times: Optional[List[int]] = None,
         channels: int = 1,
-        log_intermediate: bool = True,
         y: Optional[Tensor] = None,
         cov_num_sample: int = 100,
         num_steps: int = 10,
+        log_intermediate: bool = True,
     ) -> Tuple[Tensor, Tensor]:
         """
         Sample with uncertainty tracking and Cov(x, v) estimation.
@@ -247,7 +246,7 @@ class UQFlowMatching(FlowMatching):
             )
 
             # Log intermediate images
-            if log_intermediate and t_sample_times and i in t_sample_times:
+            if log_intermediate:
                 intermediates.append(self.transform_sampled_image(x_t.clone()))
                 uncertainties.append(x_t_var.clone().cpu())  # per-pixel variance
 

@@ -29,8 +29,7 @@ class FlowMatching:
             batch_size: Number of samples to draw.
 
         Returns:
-            Tensor of shape (batch_size,) with uniform samples.
-        """
+            Tensor of shape (batch_size,) with uniform samples."""
         return torch.rand(batch_size, device=self.device)
 
     def perform_training_step(
@@ -221,7 +220,6 @@ class UQFlowMatching(FlowMatching):
         for i in tqdm(range(num_steps), desc="Steps", leave=False):
             t = torch.full((batch_size,), i * dt, device=self.device, dtype=torch.long)
 
-            #################################
             # Predict noise and its variance
             v_mean, v_var = model(x_t, t, y=y)  # mean and variance of noise
 
@@ -233,6 +231,10 @@ class UQFlowMatching(FlowMatching):
 
             # Variance
             x_succ_var = x_t_var + dt**2 * v_var + 2 * dt * cov_t
+
+            # NOTE: Check if variance is negative and warn
+            if (x_succ_var < -1e-12).any():
+                print("Warning: Calculated variance is less then -1e-12.")
 
             # Covariance estimation with Monte Carlo
             covariance = self.monte_carlo_covariance_estim(

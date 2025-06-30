@@ -119,7 +119,19 @@ def get_llla_dataloader(
       - 'diffusion': returns (x_t, t, noise, label)
       - 'flow': returns (x1, label)
     """
-    transform = transforms.Compose(
+
+    # NOTE: Adding Data augmentation for better Laplace fitting
+    train_transform = transforms.Compose(
+        [
+            transforms.RandomRotation(15),
+            transforms.RandomAffine(degrees=0, translate=(0.1, 0.1)),
+            transforms.ToTensor(),
+            transforms.Normalize((0.1307,), (0.3081,)),
+            transforms.Resize((28, 28)),
+        ]
+    )
+
+    test_transform = transforms.Compose(
         [
             transforms.ToTensor(),
             transforms.Normalize((0.1307,), (0.3081,)),
@@ -128,10 +140,10 @@ def get_llla_dataloader(
     )
 
     base_train = datasets.MNIST(
-        root="./data", train=True, download=True, transform=transform
+        root="./data", train=True, download=True, transform=train_transform
     )
     base_test = datasets.MNIST(
-        root="./data", train=False, download=True, transform=transform
+        root="./data", train=False, download=True, transform=test_transform
     )
 
     if num_elements is not None:

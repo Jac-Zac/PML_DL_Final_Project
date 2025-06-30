@@ -84,7 +84,7 @@ def main():
         method_instance,
         num_intermediate=5,
         n=args.n,
-        max_steps=args.max_steps,
+        num_steps=args.max_steps,
         save_dir=args.save_dir,
         device=device,
         num_classes=num_classes,

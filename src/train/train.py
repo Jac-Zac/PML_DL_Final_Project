@@ -112,7 +112,7 @@ def train(
     wandb_run = None
     if use_wandb:
         wandb_run = initialize_wandb(
-            project="diffusion-project",
+            project="bayesflow-project",
             config={
                 "epochs": num_epochs,
                 "lr": learning_rate,

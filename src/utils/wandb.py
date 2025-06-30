@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 import wandb
 
 
-def initialize_wandb(project="diffusion-project", run_name=None, config=None):
+def initialize_wandb(project="bayesflow-project", run_name=None, config=None):
     if wandb.run is not None:
         print(f"WandB already initialized with project: {wandb.run.project}")
         return wandb.run

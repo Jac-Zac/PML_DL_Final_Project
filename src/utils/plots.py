@@ -10,7 +10,7 @@ def plot_image_grid(
     method_instance,
     n: int,
     num_intermediate: int,
-    max_steps: int,
+    num_steps: int,
     save_dir: str,
     device: torch.device,
     num_classes: int,
@@ -23,36 +23,30 @@ def plot_image_grid(
         method_instance: The sampling method instance (Diffusion or FlowMatching).
         n (int): Number of samples to generate.
         num_intermediate (int): Number of intermediate steps to visualize.
-        max_steps (int): Maximum number of steps or timesteps.
+        num_steps (int): Maximum number of steps or timesteps.
         save_dir (str): Directory to save the output image.
         device: Torch device.
         num_classes (int): Number of classes for label conditioning.
     """
-    # Prepare conditioning labels
+    os.makedirs(save_dir, exist_ok=True)
     y = torch.arange(n, device=device) % num_classes
 
-    # Decide which type of timesteps to generate
+    # Choose timesteps depending on method type
     if method_instance.__class__.__name__ == "FlowMatching":
-        # Flow matching: choose indices between 0 and (steps-1)
-        step_indices = torch.linspace(
-            0, max_steps - 1, steps=num_intermediate, dtype=torch.int32
+        t_sample_times = torch.linspace(
+            0, num_steps - 1, steps=num_intermediate, dtype=torch.int32
         ).tolist()
 
         all_samples_grouped = method_instance.sample(
             model,
-            steps=max_steps,
+            steps=num_steps,
             log_intermediate=True,
-            t_sample_times=step_indices,
+            t_sample_times=t_sample_times,
             y=y,
         )
-        timesteps = step_indices
-    else:
-        # Diffusion: choose timesteps between max_steps and 0
+    else:  # Diffusion
         t_sample_times = torch.linspace(
-            max_steps,
-            0,
-            steps=num_intermediate,
-            dtype=torch.int32,
+            num_steps, 0, steps=num_intermediate, dtype=torch.int32
         ).tolist()
 
         all_samples_grouped = method_instance.sample(
@@ -61,15 +55,12 @@ def plot_image_grid(
             log_intermediate=True,
             y=y,
         )
-        timesteps = t_sample_times
 
-    # Stack all generated images into a (B, T, C, H, W) tensor
-    stacked = torch.stack(all_samples_grouped)  # (T, B, C, H, W)
-    permuted = stacked.permute(1, 0, 2, 3, 4)  # (B, T, C, H, W)
+    # (T, B, C, H, W) -> (B, T, C, H, W)
+    stacked = torch.stack(all_samples_grouped)
+    permuted = stacked.permute(1, 0, 2, 3, 4)
     num_samples, num_timesteps = permuted.shape[:2]
 
-    # Save as a grid
-    os.makedirs(save_dir, exist_ok=True)
     out_path = os.path.join(save_dir, "all_samples_grid.png")
 
     fig, axes = plt.subplots(
@@ -88,113 +79,13 @@ def plot_image_grid(
             ax.imshow(img, cmap="gray")
             ax.axis("off")
             if row == 0:
-                ax.set_title(f"step={timesteps[col]}", fontsize=10)
+                ax.set_title(f"step={t_sample_times[col]}", fontsize=10)
             if col == 0:
                 ax.set_ylabel(f"Sample {row+1}", fontsize=10)
 
     plt.tight_layout()
     plt.savefig(out_path, bbox_inches="tight")
     plt.close()
-
-
-def plot_interleaved_image_uncertainty(
-    images: torch.Tensor,
-    uncertainties: torch.Tensor,
-    save_path: str,
-    timesteps: list,
-    uq_cmp: str = "viridis",
-    img_cmap: str = "gray",
-    mult: float = 700.0,
-):
-    """
-    Plot interleaved image and uncertainty maps.
-
-    Args:
-        images (Tensor): Shape (T, B, C, H, W)
-        uncertainties (Tensor): Shape (T, B, C, H, W)
-        save_path (str): Path to save figure.
-        timesteps (list[int]): Timestep indices to plot.
-        uq_cmp (str): Colormap for uncertainty.
-        img_cmap (str): Colormap for images.
-        mult (float): Multiplier for uncertainty visualization.
-    """
-    if isinstance(images, list):
-        images = torch.stack(images)
-    if isinstance(uncertainties, list):
-        uncertainties = torch.stack(uncertainties)
-
-    T, B, C, H, W = images.shape
-    assert (
-        uncertainties.shape[0] == T and uncertainties.shape[1] == B
-    ), "Images and uncertainties must have matching shapes in first two dims."
-
-    # If timesteps length doesn't match T, slice internally
-    if timesteps is None or len(timesteps) != T:
-        if timesteps is None:
-            timesteps = list(range(T))
-        else:
-            timesteps = list(timesteps)
-        images = images[timesteps]
-        uncertainties = uncertainties[timesteps]
-        T = len(timesteps)
-
-    images = images.permute(1, 0, 2, 3, 4)  # (B, T, C, H, W)
-    uncertainties = uncertainties.permute(1, 0, 2, 3, 4) * mult  # (B, T, C, H, W)
-
-    B = images.shape[0]
-
-    fig, axes = plt.subplots(
-        2 * B,
-        T,
-        figsize=(1.5 * T, 1.5 * 2 * B),
-    )
-
-    # Make sure axes is 2D array even if B=1 or T=1
-    if T == 1:
-        axes = np.expand_dims(axes, 1)
-    if B == 1:
-        axes = np.expand_dims(axes, 0)
-
-    all_unc_values = []
-    unc_images = []
-
-    for row in range(B):
-        for col in range(T):
-            img = images[row, col].squeeze().cpu().numpy()
-            unc = uncertainties[row, col].squeeze().cpu().numpy()
-            all_unc_values.append(unc)
-
-            ax_img = axes[2 * row, col]
-            ax_unc = axes[2 * row + 1, col]
-
-            ax_img.imshow(img, cmap=img_cmap)
-            ax_img.axis("off")
-            if row == 0:
-                ax_img.set_title(f"step={timesteps[col]}", fontsize=10)
-            if col == 0:
-                ax_img.set_ylabel(f"Sample {row + 1}", fontsize=10)
-
-            im = ax_unc.imshow(unc, cmap=uq_cmp)
-            unc_images.append(im)
-            ax_unc.axis("off")
-
-    vmin = min(u.min() for u in all_unc_values)
-    vmax = max(u.max() for u in all_unc_values)
-    for im in unc_images:
-        im.set_clim(vmin, vmax)
-
-    plt.tight_layout()
-    plt.subplots_adjust(right=0.87)
-    cbar_ax = fig.add_axes([0.89, 0.15, 0.02, 0.7])
-    cbar = plt.colorbar(unc_images[0], cax=cbar_ax)
-    cbar.set_label("Uncertainty", rotation=270, labelpad=15)
-
-    plt.savefig(save_path, bbox_inches="tight")
-    plt.close()
-
-
-import matplotlib.pyplot as plt
-import numpy as np
 
 
 def plot_uncertainty_sums(

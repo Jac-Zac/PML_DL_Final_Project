@@ -34,8 +34,8 @@ def get_transforms(dataset_name: str, train: bool = True):
 def get_dataloaders(
     batch_size: int = 120,
     shuffle: bool = True,
-    num_elements: Optional[int] = None,
     dataset_name: str = "MNIST",
+    num_elements: Optional[int] = None,
 ) -> Tuple[DataLoader, DataLoader]:
     """
     Load MNIST or FashionMNIST dataset and return (image, label) DataLoaders.
@@ -128,10 +128,10 @@ class FlowMatchingDataset(Dataset):
 def get_llla_dataloader(
     batch_size: int = 120,
     shuffle: bool = True,
-    num_elements: Optional[int] = None,
     max_timesteps: int = 1000,
     mode: str = "diffusion",  # "diffusion" or "flow"
     dataset_name: str = "MNIST",
+    num_elements: Optional[int] = None,
 ) -> Tuple[DataLoader, DataLoader]:
     """
     Load MNIST or FashionMNIST and return DataLoaders for either:

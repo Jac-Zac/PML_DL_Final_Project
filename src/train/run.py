@@ -25,6 +25,13 @@ def parse_args():
         choices=["diffusion", "flow"],
         help="Training method: diffusion or flow matching",
     )
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        default="MNIST",
+        choices=["MNIST", "FashionMNIST"],
+        help="Dataset to use for training",
+    )
     return parser.parse_args()
 
 
@@ -34,15 +41,16 @@ def main():
     device = get_device()
     os.makedirs("checkpoints", exist_ok=True)
 
-    # Returns DataLoaders that yield (image, timestep, label)
-    train_loader, val_loader = get_dataloaders(batch_size=args.batch_size)
+    # Pass dataset name to get_dataloaders
+    train_loader, val_loader = get_dataloaders(
+        batch_size=args.batch_size, dataset_name=args.dataset
+    )
 
-    # HACK: Hard-coded number of classes (MNIST = 10)
+    # Both MNIST and FashionMNIST have 10 classes and 1 channel grayscale images
     model_kwargs = {
         "num_classes": 10,
         "out_channels": 1,
         "time_emb_dim": 128,
-        # NOTE: Change time embedding to learned for flow which is more sensible
         "time_embedding_type": "mlp" if args.method == "flow" else "sinusoidal",
     }
 

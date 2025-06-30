@@ -88,6 +88,102 @@ def plot_image_grid(
     plt.close()
 
 
+def plot_interleaved_image_uncertainty(
+    images: torch.Tensor,
+    uncertainties: torch.Tensor,
+    save_path: str,
+    timesteps: list,
+    uq_cmp: str = "viridis",
+    img_cmap: str = "gray",
+    mult: float = 700.0,
+):
+    """
+    Plot interleaved image and uncertainty maps.
+
+    Args:
+        images (Tensor): Shape (T, B, C, H, W)
+        uncertainties (Tensor): Shape (T, B, C, H, W)
+        save_path (str): Path to save figure.
+        timesteps (list[int]): Timestep indices to plot.
+        uq_cmp (str): Colormap for uncertainty.
+        img_cmap (str): Colormap for images.
+        mult (float): Multiplier for uncertainty visualization.
+    """
+    if isinstance(images, list):
+        images = torch.stack(images)
+    if isinstance(uncertainties, list):
+        uncertainties = torch.stack(uncertainties)
+
+    T, B, C, H, W = images.shape
+    assert (
+        uncertainties.shape[0] == T and uncertainties.shape[1] == B
+    ), "Images and uncertainties must have matching shapes in first two dims."
+
+    # If timesteps length doesn't match T, slice internally
+    if timesteps is None or len(timesteps) != T:
+        if timesteps is None:
+            timesteps = list(range(T))
+        else:
+            timesteps = list(timesteps)
+        images = images[timesteps]
+        uncertainties = uncertainties[timesteps]
+        T = len(timesteps)
+
+    images = images.permute(1, 0, 2, 3, 4)  # (B, T, C, H, W)
+    uncertainties = uncertainties.permute(1, 0, 2, 3, 4) * mult  # (B, T, C, H, W)
+
+    B = images.shape[0]
+
+    fig, axes = plt.subplots(
+        2 * B,
+        T,
+        figsize=(1.5 * T, 1.5 * 2 * B),
+    )
+
+    # Make sure axes is 2D array even if B=1 or T=1
+    if T == 1:
+        axes = np.expand_dims(axes, 1)
+    if B == 1:
+        axes = np.expand_dims(axes, 0)
+
+    all_unc_values = []
+    unc_images = []
+
+    for row in range(B):
+        for col in range(T):
+            img = images[row, col].squeeze().cpu().numpy()
+            unc = uncertainties[row, col].squeeze().cpu().numpy()
+            all_unc_values.append(unc)
+
+            ax_img = axes[2 * row, col]
+            ax_unc = axes[2 * row + 1, col]
+
+            ax_img.imshow(img, cmap=img_cmap)
+            ax_img.axis("off")
+            if row == 0:
+                ax_img.set_title(f"step={timesteps[col]}", fontsize=10)
+            if col == 0:
+                ax_img.set_ylabel(f"Sample {row + 1}", fontsize=10)
+
+            im = ax_unc.imshow(unc, cmap=uq_cmp)
+            unc_images.append(im)
+            ax_unc.axis("off")
+
+    vmin = min(u.min() for u in all_unc_values)
+    vmax = max(u.max() for u in all_unc_values)
+    for im in unc_images:
+        im.set_clim(vmin, vmax)
+
+    plt.tight_layout()
+    plt.subplots_adjust(right=0.87)
+    cbar_ax = fig.add_axes([0.89, 0.15, 0.02, 0.7])
+    cbar = plt.colorbar(unc_images[0], cax=cbar_ax)
+    cbar.set_label("Uncertainty", rotation=270, labelpad=15)
+
+    plt.savefig(save_path, bbox_inches="tight")
+    plt.close()
+
+
 def plot_uncertainty_sums(
     uncertainties,
     samples=None,

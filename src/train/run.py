@@ -10,7 +10,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Train a DDPM-style model")
     parser.add_argument("--epochs", type=int, default=10, help="Training epochs")
     parser.add_argument("--batch-size", type=int, default=128, help="Batch size")
-    parser.add_argument("--lr", type=float, default=2e-3, help="Learning rate")
+    parser.add_argument("--lr", type=float, default=1e-3, help="Learning rate")
     parser.add_argument("--seed", type=int, default=1337, help="Random seed")
     parser.add_argument(
         "--checkpoint", type=str, default=None, help="Path to checkpoint"
@@ -29,7 +29,7 @@ def parse_args():
         "--dataset",
         type=str,
         default="MNIST",
-        choices=["MNIST", "FashionMNIST"],
+        choices=["MNIST", "KMNIST", "FashionMNIST"],
         help="Dataset to use for training",
     )
     return parser.parse_args()

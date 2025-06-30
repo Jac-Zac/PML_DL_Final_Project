@@ -10,9 +10,11 @@ def get_transforms(dataset_name: str, train: bool = True):
         mean, std = (0.1307,), (0.3081,)
     elif dataset_name == "FashionMNIST":
         mean, std = (0.2860,), (0.3530,)
+    elif dataset_name == "KMNIST":
+        mean, std = (0.1918,), (0.3470,)  # Approximate KMNIST mean/std
     else:
         raise ValueError(
-            f"Unsupported dataset '{dataset_name}'. Use 'MNIST' or 'FashionMNIST'."
+            f"Unsupported dataset '{dataset_name}'. Use 'MNIST', 'FashionMNIST', or 'KMNIST'."
         )
 
     base_transforms = [
@@ -38,15 +40,17 @@ def get_dataloaders(
     num_elements: Optional[int] = None,
 ) -> Tuple[DataLoader, DataLoader]:
     """
-    Load MNIST or FashionMNIST dataset and return (image, label) DataLoaders.
+    Load MNIST, FashionMNIST, or KMNIST dataset and return (image, label) DataLoaders.
     """
     if dataset_name == "MNIST":
         DatasetClass = datasets.MNIST
     elif dataset_name == "FashionMNIST":
         DatasetClass = datasets.FashionMNIST
+    elif dataset_name == "KMNIST":
+        DatasetClass = datasets.KMNIST
     else:
         raise ValueError(
-            f"Unsupported dataset '{dataset_name}'. Use 'MNIST' or 'FashionMNIST'."
+            f"Unsupported dataset '{dataset_name}'. Use 'MNIST', 'FashionMNIST', or 'KMNIST'."
         )
 
     transform = get_transforms(
@@ -134,7 +138,7 @@ def get_llla_dataloader(
     num_elements: Optional[int] = None,
 ) -> Tuple[DataLoader, DataLoader]:
     """
-    Load MNIST or FashionMNIST and return DataLoaders for either:
+    Load MNIST, FashionMNIST, or KMNIST and return DataLoaders for either:
       - 'diffusion': returns (x_t, t, noise, label)
       - 'flow': returns (x_t, t, dx, label)
     """
@@ -142,9 +146,11 @@ def get_llla_dataloader(
         DatasetClass = datasets.MNIST
     elif dataset_name == "FashionMNIST":
         DatasetClass = datasets.FashionMNIST
+    elif dataset_name == "KMNIST":
+        DatasetClass = datasets.KMNIST
     else:
         raise ValueError(
-            f"Unsupported dataset '{dataset_name}'. Use 'MNIST' or 'FashionMNIST'."
+            f"Unsupported dataset '{dataset_name}'. Use 'MNIST', 'FashionMNIST', or 'KMNIST'."
         )
 
     train_transform = get_transforms(dataset_name, train=True)

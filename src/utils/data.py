@@ -87,25 +87,24 @@ class FlowMatchingMNIST(Dataset):
 
     def __getitem__(
         self, idx: int
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, Any]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, Any]:
         """
         Returns:
             x_t: interpolated image between x0 and x1 at time t
-            t: sampled time ∈ [0, 1]
+            t: sampled time in [0, 1]
             dx: velocity vector (x1 - x0)
-            x0: random noise image
             label: digit label
         """
         image, label = self.base_dataset[idx]
         x1 = image * 2.0 - 1.0  # scale to [-1, 1]
         x0 = torch.randn_like(x1)
         t = torch.rand(1)
-        t_expanded = t.view(-1, *([1] * (x1.dim() - 1)))  # broadcast to image shape
+        t_expanded = t.view(-1, 1, 1)  # Broadcast to image shape
 
         x_t = (1 - t_expanded) * x0 + t_expanded * x1
         dx = x1 - x0
 
-        return x_t, t.squeeze(0), dx, x0, label
+        return x_t, t.squeeze(0), dx, label
 
 
 def get_llla_dataloader(

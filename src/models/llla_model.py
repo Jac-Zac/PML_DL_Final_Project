@@ -29,10 +29,10 @@ class LaplaceApproxModel(nn.Module):
         # This gives a Bayesian linear model with a Gaussian posterior over weights
         self.conv_out_la = DiagLaplace(
             nn.Sequential(
-                self.conv_out, nn.Flatten(1)
+                self.conv_out, nn.Flatten(1, -1)
             ),  # Flatten output to 2D tensor [B, D]
-            likelihood="regression",  # Gaussian likelihood for noise prediction
-            sigma_noise=1.0,  # Observation noise std
+            likelihood="regression",  # Gaussian likelihood for prediction
+            sigma_noise=1.0,  # Observation std
             prior_precision=1.0,  # Prior precision (lambda)
             prior_mean=0.0,  # Prior mean
             temperature=1.0,  # Temperature scaling
@@ -59,7 +59,7 @@ class LaplaceApproxModel(nn.Module):
         ).detach()
 
         # Peek at one batch to set output size
-        x_t, t, noise, y = next(iter(train_loader))
+        x_t, t, _, y = next(iter(train_loader))
         device = self.conv_out_la._device
 
         with torch.no_grad():
@@ -74,19 +74,20 @@ class LaplaceApproxModel(nn.Module):
         self.conv_out_la.n_outputs = out[0].numel()
         setattr(self.conv_out_la.model, "output_size", self.conv_out_la.n_outputs)
 
+        # Size of the data loader
         N = len(train_loader.dataset)
 
-        for x_t, t, noise, y in tqdm(train_loader, desc="Fitting Laplace", leave=False):
+        for x_t, t, pred, y in tqdm(train_loader, desc="Fitting Laplace", leave=False):
             self.conv_out_la.model.zero_grad()
 
             # Move batch to the appropriate device
-            x_t, t, noise, y = [tensor.to(device) for tensor in (x_t, t, noise, y)]
+            x_t, t, pred, y = [tensor.to(device) for tensor in (x_t, t, pred, y)]
 
             with torch.no_grad():
                 feats = self.feature_extractor(x_t, t, y=y)
 
             # Use the true noise added during forward diffusion as regression target
-            targets = noise.view(noise.size(0), -1)  # flatten: [B, D]
+            targets = pred.view(pred.size(0), -1)  # flatten: [B, D]
 
             # Compute per-batch curvature (Hessian approx) and loss
             loss_b, H_b = self.conv_out_la._curv_closure(feats, targets, N)

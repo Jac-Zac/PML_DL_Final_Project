@@ -108,7 +108,7 @@ class LaplaceApproxModel(nn.Module):
 
         # Predictive mean and variance via Monte Carlo approximation
         mean, var = self.conv_out_la(
-            feats, pred_type="nn", link_approx="mc", n_samples=50
+            feats, pred_type="nn", link_approx="mc", n_samples=100
         )
 
         # Reshape [B, 784] -> [B, 1, 28, 28] for image-shaped output

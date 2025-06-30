@@ -2,6 +2,7 @@ from typing import List, Optional, Tuple
 
 import torch
 from torch import Tensor, nn
+from tqdm import tqdm
 
 
 class Diffusion:
@@ -194,7 +195,7 @@ class UQDiffusion(Diffusion):
 
         intermediates, uncertainties = [], []
 
-        for i in reversed(range(self.noise_steps)):
+        for i in tqdm(reversed(range(self.noise_steps)), desc="Steps", leave=False):
             t = torch.full((batch_size,), i, device=self.device, dtype=torch.long)
 
             # Predict noise and its variance

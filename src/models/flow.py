@@ -2,6 +2,7 @@ from typing import List, Optional, Tuple
 
 import torch
 from torch import Tensor, nn
+from tqdm import tqdm
 
 
 class FlowMatching:
@@ -219,7 +220,7 @@ class UQFlowMatching(FlowMatching):
         intermediates, uncertainties = [], []
 
         dt = 1.0 / num_steps
-        for i in range(num_steps):
+        for i in tqdm(range(num_steps), desc="Steps", leave=False):
             t = torch.full((batch_size,), i * dt, device=self.device, dtype=torch.long)
 
             #################################

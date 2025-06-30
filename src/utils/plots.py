@@ -206,8 +206,8 @@ def plot_image_uncertainty_grid(
         uncertainties = torch.stack(uncertainties)  # (T, B, C, H, W)
 
     # Multiplier
-    # mult = 700
-    mult = 1
+    mult = 700
+    # mult = 1
 
     # Ensure uncertainties has same ordering: (B, T, C, H, W)
     uncertainties_permuted = uncertainties.permute(1, 0, 2, 3, 4) * mult

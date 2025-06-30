@@ -77,10 +77,9 @@ class Diffusion:
     def sample(
         self,
         model: nn.Module,
-        t_sample_times: Optional[List[int]] = None,
         channels: int = 1,
-        log_intermediate: bool = False,
         y: Optional[Tensor] = None,
+        log_intermediate: bool = False,
     ) -> List[Tensor]:
         model.eval()
         batch_size = 1 if y is None else y.size(0)
@@ -93,7 +92,7 @@ class Diffusion:
             t = torch.full((batch_size,), i, device=self.device, dtype=torch.long)
             x_t = self.sample_step(model, x_t, t, y)
 
-            if log_intermediate and t_sample_times and i in t_sample_times:
+            if log_intermediate:
                 intermediates.append(self.transform_sampled_image(x_t.clone()))
 
         intermediates.append(self.transform_sampled_image(x_t))
@@ -178,11 +177,10 @@ class UQDiffusion(Diffusion):
     def sample_with_uncertainty(
         self,
         model: nn.Module,
-        t_sample_times: Optional[List[int]] = None,
         channels: int = 1,
-        log_intermediate: bool = True,
         y: Optional[Tensor] = None,
         cov_num_sample: int = 10,
+        log_intermediate: bool = True,
     ) -> Tuple[Tensor, Tensor]:
         """
         Iteratively sample from the model, tracking predictive uncertainty and optionally Cov(x, ε).
@@ -224,14 +222,11 @@ class UQDiffusion(Diffusion):
             coef3 = 2 * (1 - alpha_t) / alpha_t * (1 - alpha_bar_t).sqrt()
             coef4 = (1 - alpha_t) ** 2 / alpha_t * (1 - alpha_bar_t)
             x_prev_var = (
-                # (1 / alpha_t * x_t_var)
-                # - (coef3 * cov_t)
-                # + (coef4 * eps_var)
-                # + beta_t
-                (1 / alpha_t * x_t_var)
-                + (coef4 * eps_var)
-                + beta_t
+                (1 / alpha_t * x_t_var) - (coef3 * cov_t) + (coef4 * eps_var) + beta_t
             )
+            # (1 / alpha_t * x_t_var)
+            # + (coef4 * eps_var)
+            # + beta_t
 
             if i > 0:
                 # Covariance estimation with Monte Carlo
@@ -244,24 +239,24 @@ class UQDiffusion(Diffusion):
                     y=y,
                 )
 
-            # if i % 100 == 0 or i == self.noise_steps - 1:
-            #     print(f"\nStep {i}")
-            #     print(
-            #         f"  eps_var mean: {eps_var.mean().item():.4e}, std: {eps_var.std().item():.4e}"
-            #     )
-            #     if i > 0:
-            #         print(
-            #             f"  Covariance mean: {covariance.mean().item():.4e}, std: {covariance.std().item():.4e}"
-            #         )
-            #     print(
-            #         f"  x_t_var mean: {x_t_var.mean().item():.4e}, std: {x_t_var.std().item():.4e}"
-            #     )
-            #     print(
-            #         f"  x_prev_var mean: {x_prev_var.mean().item():.4e}, std: {x_prev_var.std().item():.4e}"
-            #     )
+            if i % 100 == 0 or i == self.noise_steps - 1:
+                print(f"\nStep {i}")
+                print(
+                    f"  eps_var mean: {eps_var.mean().item():.4e}, std: {eps_var.std().item():.4e}"
+                )
+                if i > 0:
+                    print(
+                        f"  Covariance mean: {covariance.mean().item():.4e}, std: {covariance.std().item():.4e}"
+                    )
+                print(
+                    f"  x_t_var mean: {x_t_var.mean().item():.4e}, std: {x_t_var.std().item():.4e}"
+                )
+                print(
+                    f"  x_prev_var mean: {x_prev_var.mean().item():.4e}, std: {x_prev_var.std().item():.4e}"
+                )
 
             # Log intermediate images
-            if log_intermediate and t_sample_times and i in t_sample_times:
+            if log_intermediate:
                 intermediates.append(self.transform_sampled_image(x_t.clone()))
                 uncertainties.append(x_t_var.clone().cpu())  # per-pixel variance
 
@@ -270,8 +265,8 @@ class UQDiffusion(Diffusion):
             x_t_var = x_prev_var
             cov_t = covariance
 
-        uncertainties = torch.stack(uncertainties)  # [num_steps, B, C, H, W]
-        intermediates = torch.stack(intermediates)  # [num_steps, B, C, H, W]
+        uncertainties = torch.stack(uncertainties)  # [n_steps, B, C, H, W]
+        intermediates = torch.stack(intermediates)  # [n_steps, B, C, H, W]
 
         model.train()
         return intermediates, uncertainties

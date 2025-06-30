@@ -259,3 +259,71 @@ def plot_image_uncertainty_grid(
     plt.savefig(out_path_unc, bbox_inches="tight")
     plt.close()
     return all_samples_grouped, uncertainties
+
+
+def plot_selected_uncertainties(
+    uncertainties,
+    save_path: str,
+    timesteps: list,
+    selected_indices: list,
+    uq_cmp: str = "viridis",
+    mult: float = 700.0,
+):
+    """
+    Plot only selected uncertainty maps from the full set.
+
+    Args:
+        uncertainties (Tensor): Shape (T, B, C, H, W) or (list of T tensors).
+        save_path (str): Where to save the output image.
+        timesteps (list[int]): All timestep indices.
+        selected_indices (list[int]): Subset indices to plot.
+        uq_cmp (str): Colormap.
+        mult (float): Uncertainty multiplier for visualization.
+    """
+    if isinstance(uncertainties, list):
+        uncertainties = torch.stack(uncertainties)  # (T, B, C, H, W)
+    uncertainties = uncertainties * mult
+    permuted = uncertainties.permute(1, 0, 2, 3, 4)  # (B, T, C, H, W)
+
+    # We plot only the selected indices
+    b, t, c, h, w = permuted.shape
+    selected_timesteps = [timesteps[i] for i in selected_indices]
+
+    fig, axes = plt.subplots(
+        b,
+        len(selected_indices),
+        figsize=(1.5 * len(selected_indices), 1.5 * b),
+    )
+    if b == 1:
+        axes = np.expand_dims(axes, 0)
+    if len(selected_indices) == 1:
+        axes = np.expand_dims(axes, 1)
+
+    all_unc_values = []
+    images = []
+
+    for row in range(b):
+        for col_idx, col in enumerate(selected_indices):
+            unc = permuted[row, col].squeeze().cpu().numpy()
+            all_unc_values.append(unc)
+            ax = axes[row, col_idx]
+            im = ax.imshow(unc, cmap=uq_cmp)
+            images.append(im)
+            ax.axis("off")
+            if row == 0:
+                ax.set_title(f"step={selected_timesteps[col_idx]}", fontsize=10)
+            if col_idx == 0:
+                ax.set_ylabel(f"Sample {row+1}", fontsize=10)
+
+    vmin = min(u.min() for u in all_unc_values)
+    vmax = max(u.max() for u in all_unc_values)
+    for im in images:
+        im.set_clim(vmin, vmax)
+
+    plt.tight_layout()
+    plt.subplots_adjust(right=0.85)
+    cbar_ax = fig.add_axes([0.87, 0.15, 0.02, 0.7])
+    cbar = plt.colorbar(images[0], cax=cbar_ax)
+    cbar.set_label("Uncertainty", rotation=270, labelpad=15)
+    plt.savefig(save_path, bbox_inches="tight")
+    plt.close()

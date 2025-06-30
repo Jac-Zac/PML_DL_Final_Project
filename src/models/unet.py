@@ -166,15 +166,13 @@ class UNet(nn.Module):
         self,
         in_channels: int = 1,
         out_channels: int = 1,
-        base_channels: int = 64,
-        channel_multipliers: List[int] = [1, 2, 4],
+        base_channels: int = 32,
+        channel_multipliers: List[int] = [1, 2, 3],
         time_emb_dim: int = 128,
-        timesteps: int = 1000,
         num_classes: Optional[int] = None,
         time_embedding_type: str = "sinusoidal",  # "sinusoidal" for diffusion, "mlp" for flow-matching
     ):
         super().__init__()
-        self.timesteps = timesteps
         self.num_classes = num_classes
 
         # Time embedding

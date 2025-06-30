@@ -50,7 +50,6 @@ def main():
     model_kwargs = {
         "num_classes": 10,
         "out_channels": 1,
-        "time_emb_dim": 128,
         "time_embedding_type": "mlp" if args.method == "flow" else "sinusoidal",
     }
 

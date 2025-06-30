@@ -7,7 +7,7 @@ from laplace.baselaplace import DiagLaplace
 # BackPack curvature estimator backend
 from laplace.curvature.backpack import BackPackEF
 from torch.nn.utils import parameters_to_vector
-from tqdm import tqdm
+from tqdm.autonotebook import tqdm
 
 
 class LaplaceApproxModel(nn.Module):

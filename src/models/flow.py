@@ -2,7 +2,7 @@ from typing import List, Optional, Tuple
 
 import torch
 from torch import Tensor, nn
-from tqdm import tqdm
+from tqdm.autonotebook import tqdm
 
 
 class FlowMatching:
@@ -155,38 +155,36 @@ class UQFlowMatching(FlowMatching):
         t: Tensor,
         x_mean: Tensor,
         x_var: Tensor,
-        S: int = 10,
+        S: int = 100,
         y: Optional[Tensor] = None,
     ) -> Tensor:
         """
         Perform Monte Carlo sampling to estimate covariance matrix.
         Args:
-            mean_x0: Mean of x_0 estimated by diffusion.
-            var_x0: Variance of x_0 estimated by propagation.
+            x_mean: Mean of x_0 estimated by diffusion.
+            x_var: Variance of x_0 estimated by propagation.
             S: Number of Monte Carlo samples.
 
         Returns:
-            mc_mean: Empirical mean of samples.
-            mc_var: Empirical pixel-wise variance of samples.
+            covariance: Empirical diagonal covariance
         """
 
-        std_x = torch.sqrt(torch.clamp(x_var, min=1e-8))
+        std_x = torch.sqrt(torch.clamp(x_var, min=1e-12))
         x_samples = [x_mean + std_x * torch.randn_like(x_mean) for _ in range(S)]
-
-        v_samples = []
-
-        for i in range(S):
-            v_mean_i, v_var_i = model(x_samples[i], t, y=y)
-            std_v_i = torch.sqrt(torch.clamp(v_var_i, min=1e-8))
-            v_samples.append(v_mean_i + std_v_i * torch.randn_like(v_mean_i))
+        v_samples = [model.accurate_forward(x_i, t, y=y) for x_i in x_samples]
 
         x_samples = torch.stack(x_samples, dim=0)  # [S, B, C, H, W]
         v_samples = torch.stack(v_samples, dim=0)  # [S, B, C, H, W]
-        first_term = 1 / S * torch.sum(x_samples * v_samples, dim=0)  # [B, C, H, W]
-        second_term = torch.mean(x_samples, dim=0) * torch.mean(
-            v_samples, dim=0
-        )  # [B, C, H, W]
-        return first_term - second_term
+
+        # Compute covariance with numerical stability
+        x_centered = x_samples - x_mean.unsqueeze(0)
+        v_centered = v_samples - torch.mean(v_samples, dim=0, keepdim=True)
+
+        # NOTE: Compute the first term since second is 0 from the formula
+        # And this avoids numerical instabilities
+        covariance = torch.mean(x_centered * v_centered, dim=0)
+
+        return covariance
 
     @torch.no_grad()
     def sample_with_uncertainty(
@@ -196,9 +194,9 @@ class UQFlowMatching(FlowMatching):
         channels: int = 1,
         log_intermediate: bool = True,
         y: Optional[Tensor] = None,
-        cov_num_sample: int = 10,
+        cov_num_sample: int = 100,
         num_steps: int = 10,
-    ) -> Tuple[List[Tensor], Tensor]:
+    ) -> Tuple[Tensor, Tensor]:
         """
         Sample with uncertainty tracking and Cov(x, v) estimation.
 
@@ -218,8 +216,8 @@ class UQFlowMatching(FlowMatching):
         cov_t = torch.zeros_like(x_t)
 
         intermediates, uncertainties = [], []
-
         dt = 1.0 / num_steps
+
         for i in tqdm(range(num_steps), desc="Steps", leave=False):
             t = torch.full((batch_size,), i * dt, device=self.device, dtype=torch.long)
 
@@ -246,32 +244,17 @@ class UQFlowMatching(FlowMatching):
                 y=y,
             )
 
-            print(f"\nStep {i}")
-            print("v_var mean:", v_var.mean().item(), "std:", v_var.std().item())
-            print(
-                "covariance mean:",
-                covariance.mean().item(),
-                "std:",
-                covariance.std().item(),
-            )
-            print("x_t_var mean:", x_t_var.mean().item(), "std:", x_t_var.std().item())
-            print(
-                "x_succ_var mean:",
-                x_succ_var.mean().item(),
-                "std:",
-                x_succ_var.std().item(),
-            )
-
             # Log intermediate images
-            # if log_intermediate and t_sample_times and i in t_sample_times:
-            intermediates.append(self.transform_sampled_image(x_t.clone()))
-            uncertainties.append(x_t_var.clone().cpu())  # per-pixel variance
+            if log_intermediate and t_sample_times and i in t_sample_times:
+                intermediates.append(self.transform_sampled_image(x_t.clone()))
+                uncertainties.append(x_t_var.clone().cpu())  # per-pixel variance
 
             x_t = x_succ
             x_t_mean = x_succ_mean
             x_t_var = x_succ_var
             cov_t = covariance
 
+        intermediates = torch.stack(intermediates)  # [num_steps, B, C, H, W]
         uncertainties = torch.stack(uncertainties)  # [num_steps, B, C, H, W]
 
         model.train()

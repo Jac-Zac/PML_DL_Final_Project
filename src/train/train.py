@@ -3,7 +3,7 @@ from typing import Optional
 import torch
 from torch.nn.utils import clip_grad_norm_
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from tqdm import tqdm
+from tqdm.autonotebook import tqdm
 
 from src.utils.environment import load_checkpoint
 from src.utils.wandb import (

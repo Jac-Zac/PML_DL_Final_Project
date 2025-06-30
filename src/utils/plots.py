@@ -165,25 +165,23 @@ def plot_image_uncertainty_grid(
     ### ------------------ Plot images grid ------------------ ###
 
     # Stack all generated images into a (B, T, C, H, W) tensor
-    stacked = torch.stack(all_samples_grouped)  # (T, B, C, H, W)
-    permuted = stacked.permute(1, 0, 2, 3, 4)  # (B, T, C, H, W)
-    num_classes, num_timesteps = permuted.shape[:2]  # extract B and T
+    if isinstance(all_samples_grouped, list):
+        all_samples_grouped = torch.stack(all_samples_grouped)  # (T, B, C, H, W)
 
+    permuted = all_samples_grouped.permute(1, 0, 2, 3, 4)  # (B, T, C, H, W)
+    num_classes, num_timesteps = permuted.shape[:2]  # extract B and T
     # Save as a grid
     os.makedirs(save_dir, exist_ok=True)
     out_path_img = os.path.join(save_dir, "all_samples_grid.png")
-
     fig, axes = plt.subplots(
         num_classes,
         num_intermediate,
         figsize=(1.5 * num_intermediate, 1.5 * num_classes),
     )
-
     if num_classes == 1:
         axes = np.expand_dims(axes, 0)
     if num_intermediate == 1:
         axes = np.expand_dims(axes, 1)
-
     for row in range(num_classes):
         for col in range(num_timesteps):
             img = permuted[row, col].squeeze().cpu().numpy()
@@ -194,7 +192,6 @@ def plot_image_uncertainty_grid(
                 ax.set_title(f"step={timesteps[col]}", fontsize=10)
             if col == 0:
                 ax.set_ylabel(f"Sample {row+1}", fontsize=10)
-
     plt.tight_layout()
     plt.savefig(out_path_img, bbox_inches="tight")
     plt.close()
@@ -206,38 +203,59 @@ def plot_image_uncertainty_grid(
         uncertainties = torch.stack(uncertainties)  # (T, B, C, H, W)
 
     # Multiplier
-    mult = 700
+    mult = 700  # Following Bayesdiff paper
     # mult = 1
 
     # Ensure uncertainties has same ordering: (B, T, C, H, W)
     uncertainties_permuted = uncertainties.permute(1, 0, 2, 3, 4) * mult
-
     out_path_unc = os.path.join(save_dir, "all_uncertainties_grid.png")
 
+    # Create figure with space for colorbar
     fig, axes = plt.subplots(
         num_classes,
         num_intermediate,
-        figsize=(1.5 * num_intermediate, 1.5 * num_classes),
+        figsize=(
+            1.5 * num_intermediate + 1,
+            1.5 * num_classes,
+        ),  # Extra width for colorbar
     )
-
     if num_classes == 1:
         axes = np.expand_dims(axes, 0)
     if num_intermediate == 1:
         axes = np.expand_dims(axes, 1)
 
+    # Track min/max values for colorbar scaling
+    all_unc_values = []
+    images = []  # Store image objects for colorbar
+
     for row in range(num_classes):
         for col in range(num_timesteps):
             unc = uncertainties_permuted[row, col].squeeze().cpu().numpy()
+            all_unc_values.append(unc)
             ax = axes[row, col]
             im = ax.imshow(unc, cmap=uq_cmp)  # Heatmap for uncertainty
+            images.append(im)
             ax.axis("off")
             if row == 0:
                 ax.set_title(f"step={timesteps[col]}", fontsize=10)
             if col == 0:
                 ax.set_ylabel(f"Sample {row+1}", fontsize=10)
 
+    # Set consistent color scale for all subplots
+    vmin = min(unc.min() for unc in all_unc_values)
+    vmax = max(unc.max() for unc in all_unc_values)
+    for im in images:
+        im.set_clim(vmin, vmax)
+
+    # Add colorbar
     plt.tight_layout()
+    # Create space for colorbar
+    plt.subplots_adjust(right=0.85)
+    # Add colorbar to the right of all subplots
+    cbar_ax = fig.add_axes([0.87, 0.15, 0.02, 0.7])  # [left, bottom, width, height]
+    cbar = plt.colorbar(images[0], cax=cbar_ax)
+    cbar.set_label("Uncertainty", rotation=270, labelpad=15)
+
     plt.savefig(out_path_unc, bbox_inches="tight")
     plt.close()
-
     return all_samples_grouped, uncertainties

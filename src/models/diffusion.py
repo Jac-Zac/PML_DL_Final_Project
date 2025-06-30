@@ -2,7 +2,7 @@ from typing import List, Optional, Tuple
 
 import torch
 from torch import Tensor, nn
-from tqdm import tqdm
+from tqdm.autonotebook import tqdm
 
 
 class Diffusion:
@@ -143,31 +143,36 @@ class UQDiffusion(Diffusion):
         t: Tensor,
         x_mean: Tensor,
         x_var: Tensor,
-        S: int = 10,
+        S: int = 100,
         y: Optional[Tensor] = None,
     ) -> Tensor:
         """
         Perform Monte Carlo sampling to estimate covariance matrix.
         Args:
-            mean_x0: Mean of x_0 estimated by diffusion.
-            var_x0: Variance of x_0 estimated by propagation.
+            x_mean: Mean of x_0 estimated by diffusion.
+            x_var: Variance of x_0 estimated by propagation.
             S: Number of Monte Carlo samples.
 
         Returns:
-            mc_mean: Empirical mean of samples.
-            mc_var: Empirical pixel-wise variance of samples.
+            covariance: Empirical diagonal covariance
         """
-        std_x = torch.sqrt(torch.clamp(x_var, min=1e-8))
+
+        std_x = torch.sqrt(torch.clamp(x_var, min=1e-12))
         x_samples = [x_mean + std_x * torch.randn_like(x_mean) for _ in range(S)]
-        eps = [model.accurate_forward(x_i, t, y=y) for x_i in x_samples]
+        eps_samples = [model.accurate_forward(x_i, t, y=y) for x_i in x_samples]
 
         x_samples = torch.stack(x_samples, dim=0)  # [S, B, C, H, W]
-        eps = torch.stack(eps, dim=0)  # [S, B, C, H, W]
+        eps_samples = torch.stack(eps_samples, dim=0)  # [S, B, C, H, W]
 
-        first_term = torch.mean(x_samples * eps, dim=0)  # [B, C, H, W]
-        second_term = x_mean * torch.mean(eps, dim=0)  # [B, C, H, W]
+        # Compute covariance with numerical stability
+        x_centered = x_samples - x_mean.unsqueeze(0)
+        v_centered = eps_samples - torch.mean(eps_samples, dim=0, keepdim=True)
 
-        return first_term - second_term
+        # NOTE: Compute the first term since second is 0 from the formula
+        # And this avoids numerical instabilities
+        covariance = torch.mean(x_centered * v_centered, dim=0)
+
+        return covariance
 
     @torch.no_grad()
     def sample_with_uncertainty(
@@ -178,7 +183,7 @@ class UQDiffusion(Diffusion):
         log_intermediate: bool = True,
         y: Optional[Tensor] = None,
         cov_num_sample: int = 10,
-    ) -> Tuple[List[Tensor], Tensor]:
+    ) -> Tuple[Tensor, Tensor]:
         """
         Iteratively sample from the model, tracking predictive uncertainty and optionally Cov(x, ε).
         """
@@ -219,11 +224,13 @@ class UQDiffusion(Diffusion):
             coef3 = 2 * (1 - alpha_t) / alpha_t * (1 - alpha_bar_t).sqrt()
             coef4 = (1 - alpha_t) ** 2 / alpha_t * (1 - alpha_bar_t)
             x_prev_var = (
+                # (1 / alpha_t * x_t_var)
+                # - (coef3 * cov_t)
+                # + (coef4 * eps_var)
+                # + beta_t
                 (1 / alpha_t * x_t_var)
-                - (coef3 * cov_t)
                 + (coef4 * eps_var)
                 + beta_t
-                # (1 / alpha_t * x_t_var) + (coef4 * eps_var) + beta_t
             )
 
             if i > 0:
@@ -237,21 +244,21 @@ class UQDiffusion(Diffusion):
                     y=y,
                 )
 
-            if i % 100 == 0 or i == self.noise_steps - 1:
-                print(f"\nStep {i}")
-                print(
-                    f"  eps_var mean: {eps_var.mean().item():.4e}, std: {eps_var.std().item():.4e}"
-                )
-                if i > 0:
-                    print(
-                        f"  Covariance mean: {covariance.mean().item():.4e}, std: {covariance.std().item():.4e}"
-                    )
-                print(
-                    f"  x_t_var mean: {x_t_var.mean().item():.4e}, std: {x_t_var.std().item():.4e}"
-                )
-                print(
-                    f"  x_prev_var mean: {x_prev_var.mean().item():.4e}, std: {x_prev_var.std().item():.4e}"
-                )
+            # if i % 100 == 0 or i == self.noise_steps - 1:
+            #     print(f"\nStep {i}")
+            #     print(
+            #         f"  eps_var mean: {eps_var.mean().item():.4e}, std: {eps_var.std().item():.4e}"
+            #     )
+            #     if i > 0:
+            #         print(
+            #             f"  Covariance mean: {covariance.mean().item():.4e}, std: {covariance.std().item():.4e}"
+            #         )
+            #     print(
+            #         f"  x_t_var mean: {x_t_var.mean().item():.4e}, std: {x_t_var.std().item():.4e}"
+            #     )
+            #     print(
+            #         f"  x_prev_var mean: {x_prev_var.mean().item():.4e}, std: {x_prev_var.std().item():.4e}"
+            #     )
 
             # Log intermediate images
             if log_intermediate and t_sample_times and i in t_sample_times:
@@ -264,6 +271,7 @@ class UQDiffusion(Diffusion):
             cov_t = covariance
 
         uncertainties = torch.stack(uncertainties)  # [num_steps, B, C, H, W]
+        intermediates = torch.stack(intermediates)  # [num_steps, B, C, H, W]
 
         model.train()
         return intermediates, uncertainties

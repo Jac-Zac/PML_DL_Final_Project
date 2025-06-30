@@ -1,7 +1,6 @@
-import os
 from types import SimpleNamespace
 
-from src.models.diffusion import UQDiffusion
+from src.models.flow import UQFlowMatching
 from src.models.llla_model import LaplaceApproxModel
 from src.utils.data import get_llla_dataloader
 from src.utils.environment import get_device, load_pretrained_model
@@ -11,24 +10,42 @@ from src.utils.plots import plot_image_uncertainty_grid
 def main():
     device = get_device()
     num_classes = 10  # adjust if needed
+    sample_batch_size = 16
+    num_classes = 10
+    method = "flow"
+    save_dir = "samples"
 
     # NOTE: If you have local wanbd directory and different runs online it might interfere
     # Perhaps fetch the data somehow or remove it so that it looks it up online
 
+    model_kwargs = {
+        "num_classes": num_classes,
+        "time_emb_dim": 128,
+        # NOTE: We are currently using different time embedding because of a small bug but it is fine
+        "time_embedding_type": "mlp" if method == "flow" else "sinusoidal",
+    }
+
     # Load pretrained MAP model using best checkpoint
-    diff_model = load_pretrained_model(
+    model = load_pretrained_model(
         model_name="unet",
-        ckpt_path="jac-zac/diffusion-project/best-model:v22",
+        ckpt_path="jac-zac/diffusion-project/best-model:v91",
         device=device,
-        model_kwargs={"num_classes": num_classes, "time_emb_dim": 128},
+        model_kwargs=model_kwargs,
         use_wandb=True,
     )
 
-    # 2️⃣ Prepare data loaders for the Laplace fit
-    train_loader, _ = get_llla_dataloader(batch_size=128)
+    # Prepare data loaders for the Laplace fit
+    train_loader, _ = get_llla_dataloader(batch_size=sample_batch_size, mode=method)
 
-    # WARNING: This is currently wrong I have to use the Diffusion class perhaps
-    # to return a dataloader with images with noise or somehow use directly the functions inside diffusion
+    mnist_config = SimpleNamespace()
+    mnist_config.data = SimpleNamespace()
+    mnist_config.data.image_size = 28  # MNIST image size
+
+    # Wrap diffusion model with your Custom Model for Laplace last layer approx
+    # NOTE: Automatically call fit
+    laplace_model = LaplaceApproxModel(
+        model, train_loader, args=None, config=mnist_config
+    )
 
     mnist_config = SimpleNamespace()
     mnist_config.data = SimpleNamespace()
@@ -36,55 +53,34 @@ def main():
     # Wrap diffusion model with your Custom Model for Laplace last layer approx
     # NOTE: Automatically call fit
     laplace_model = LaplaceApproxModel(
-        diff_model, train_loader, args=None, config=mnist_config
+        model, train_loader, args=None, config=mnist_config
     )
-
-    print("Laplace fitting completed on last layer of the diffusion model.")
 
     # NOTE:
     # You can use custom_model.forward or custom_model.accurate_forward for predictions
 
     # Initialize uncertainty-aware diffusion (same interface as base class)
-    diffusion = UQDiffusion(img_size=28, device=device)
+    flow = UQFlowMatching(img_size=28, device=device)
 
-    # Sample to detailed uncertainty information
-    # intermediates, uncertainties = diffusion.sample_with_uncertainty(
-    #     model=laplace_model,
-    #     channels=1,
-    # )
+    total_steps = 20
+    num_intermediate = 15
 
-    save_dir = "samples"
+    # Initialize uncertainty-aware diffusion (same interface as base class)
+    flow = UQFlowMatching(img_size=mnist_config.data.image_size, device=device)
 
-    plot_image_uncertainty_grid(
-        laplace_model,
-        diffusion,
-        num_intermediate=5,
-        n=5,
-        max_steps=1000,
+    all_samples_grouped, uncertainties = plot_image_uncertainty_grid(
+        model=laplace_model,
+        method_instance=flow,
+        num_intermediate=num_intermediate,
+        n=1,
+        total_steps=total_steps,
         save_dir=save_dir,
         device=device,
         num_classes=num_classes,
         cov_num_sample=100,
+        # uq_cmp = "viridis",
+        uq_cmp="grey",
     )
-
-    # Display samples grid
-    out_path_img = os.path.join(save_dir, "all_samples_grid.png")
-
-    # Display uncertainties grid
-    out_path_unc = os.path.join(save_dir, "all_uncertainties_grid.png")
-
-    # print(intermediates)
-    # print(uncertainties)
-    # print(covariances)
-
-    return diffusion
-
-    # Sample using the Laplace-approximated model
-    samples = diffusion.sample(model=custom_model, channels=1)
-    final_images = samples[-1]  # normalized to [0,1]
-
-    # Do something with final_images — save them or visualize
-    print(f"Generated batch of {final_images.shape[0]} images!")
 
 
 if __name__ == "__main__":

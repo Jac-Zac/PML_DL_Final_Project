@@ -78,9 +78,9 @@ class DiffusionDataset(Dataset):
     def __init__(self, base_dataset: Dataset, max_timesteps: int = 1000):
         self.base_dataset = base_dataset
         self.max_timesteps = max_timesteps
-        self.betas = torch.linspace(1e-4, 0.02, max_timesteps)
-        self.alphas = 1.0 - self.betas
-        self.alphas_cumprod = torch.cumprod(self.alphas, dim=0)
+        self.beta = torch.linspace(1e-4, 0.02, max_timesteps)
+        self.alpha = 1.0 - self.beta
+        self.alpha_bar = torch.cumprod(self.alpha, dim=0)
 
     def __len__(self) -> int:
         return len(self.base_dataset)
@@ -92,17 +92,11 @@ class DiffusionDataset(Dataset):
         image = image * 2.0 - 1.0  # scale to [-1,1]
 
         t = torch.randint(low=0, high=self.max_timesteps, size=(1,))
-        a = self.alphas_cumprod[t]
         noise = torch.randn_like(image)
 
-        sqrt_a = a.sqrt()
-        sqrt_one_minus_a = (1 - a).sqrt()
-
-        if image.dim() > 1:
-            sqrt_a = sqrt_a.view(-1, *([1] * (image.dim() - 1)))
-            sqrt_one_minus_a = sqrt_one_minus_a.view(-1, *([1] * (image.dim() - 1)))
-
-        x_t = image * sqrt_a + noise * sqrt_one_minus_a
+        sqrt_alpha_bar = self.alpha_bar[t].sqrt().view(-1, 1, 1)
+        sqrt_one_minus_alpha_bar = (1.0 - self.alpha_bar[t]).sqrt().view(-1, 1, 1)
+        x_t = sqrt_alpha_bar * image + sqrt_one_minus_alpha_bar * noise
 
         return x_t, t.squeeze(0), noise, label
 

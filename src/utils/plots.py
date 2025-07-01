@@ -1,3 +1,4 @@
+import math
 import os
 
 import matplotlib.pyplot as plt
@@ -189,69 +190,152 @@ def plot_interleaved_image_uncertainty(
     plt.close()
 
 
-def plot_uncertainty_sums(
+def plot_uncertainty_metric(
     uncertainties,
     samples=None,
-    figsize=(10, 6),
+    metrics="sum",  # can be str or list of str
+    figsize=None,
     colormap="viridis",
-    title="Sum of uncertainties over spatial dimensions",
+    title=None,
     xlabel="Steps",
-    ylabel="Sum of pixels uncertainty",
+    ylabel=None,
     save_path=None,
 ):
     """
-    Plot sums of uncertainties over spatial dims for each label/sample.
+    Plot one or multiple metrics of uncertainty over spatial dims for each label/sample.
+    If multiple metrics are passed, create a grid of subplots.
 
     Args:
-        uncertainties (Tensor or np.ndarray): shape [T, num_labels, C, H, W]
-        samples (list or None): list of sample indices to plot. If None, plot all.
-        figsize (tuple): matplotlib figure size.
-        colormap (str): name of matplotlib colormap.
-        title (str): plot title.
-        xlabel (str): x-axis label.
-        ylabel (str): y-axis label.
-        save_path (str or None): if set, save plot to this path instead of showing.
+        uncertainties: np.ndarray or tensor, shape [T, num_labels, C?, H, W]
+        samples: list of sample indices to plot. If None, plot all.
+        metrics: str or list of str, metrics to plot. One of ['sum', 'mean', 'var', 'delta', 'mean_std']
+        figsize: tuple or None. If None, auto set based on number of subplots.
+        colormap: matplotlib colormap name.
+        title: str or None. If multiple metrics, can be None or list of titles.
+        xlabel, ylabel: axis labels. If None, auto-set.
+        save_path: str or None to save figure instead of showing.
     """
-    # Convert to numpy if tensor
+
+    # Convert tensor to numpy if needed
     if hasattr(uncertainties, "cpu"):
         uncertainties = uncertainties.cpu().numpy()
 
     # Remove singleton channel dim if present
-    if uncertainties.shape[2] == 1:
-        uncertainties = uncertainties.squeeze(2)  # shape now (T, num_labels, H, W)
+    if uncertainties.ndim == 5 and uncertainties.shape[2] == 1:
+        uncertainties = uncertainties.squeeze(2)
 
     T, num_labels, H, W = uncertainties.shape
 
-    # If samples is None, plot all labels
     if samples is None:
         samples = list(range(num_labels))
     else:
-        # Validate samples indices
         samples = [s for s in samples if 0 <= s < num_labels]
+
+    # Normalize metrics to list
+    if isinstance(metrics, str):
+        metrics = [metrics]
+
+    n_metrics = len(metrics)
+
+    # Determine grid size for subplots if multiple metrics
+    if n_metrics == 1:
+        nrows, ncols = 1, 1
+    else:
+        ncols = math.ceil(math.sqrt(n_metrics))
+        nrows = math.ceil(n_metrics / ncols)
+
+    # Set figsize if not provided
+    if figsize is None:
+        figsize = (5 * ncols, 4 * nrows)
+
+    fig, axs = plt.subplots(nrows, ncols, figsize=figsize)
+    if n_metrics == 1:
+        axs = np.array([axs])  # make iterable
+    else:
+        axs = axs.flatten()
 
     cmap = plt.get_cmap(colormap, len(samples))
 
-    plt.figure(figsize=figsize)
+    for i, metric in enumerate(metrics):
+        ax = axs[i]
 
-    for idx, label_idx in enumerate(samples):
-        sums = uncertainties[:, label_idx].sum(axis=(-1, -2))  # shape (T,)
-        plt.plot(
-            range(T),
-            sums,
-            marker="o",
-            linestyle="-",
-            color=cmap(idx),
-            label=f"Label {label_idx}",
-        )
+        for idx, label_idx in enumerate(samples):
+            data = uncertainties[:, label_idx]
 
-    plt.title(title)
-    plt.xlabel(xlabel)
-    plt.ylabel(ylabel)
-    plt.grid(True)
-    plt.legend(title="Labels")
+            if metric == "sum":
+                values = data.sum(axis=(-1, -2))
+                steps = range(T)
+            elif metric == "mean":
+                values = data.mean(axis=(-1, -2))
+                steps = range(T)
+            elif metric == "var":
+                values = data.var(axis=(-1, -2))
+                steps = range(T)
+            elif metric == "delta":
+                values = np.diff(data.sum(axis=(-1, -2)))
+                steps = range(1, T)
+            elif metric == "mean_std":
+                means = data.mean(axis=(-1, -2))
+                stds = data.std(axis=(-1, -2))
+                ax.errorbar(
+                    range(T),
+                    means,
+                    yerr=stds,
+                    label=f"Label {label_idx}",
+                    color=cmap(idx),
+                    capsize=3,
+                    fmt="o-",
+                )
+                continue
+            else:
+                raise ValueError(f"Unsupported metric: {metric}")
+
+            ax.plot(
+                steps,
+                values,
+                marker="o",
+                linestyle="-",
+                color=cmap(idx),
+                label=f"Label {label_idx}",
+            )
+
+        # Titles and labels
+        if title is None:
+            plot_title = (
+                f"{metric.replace('_', ' ').title()} of uncertainties over time"
+            )
+        elif isinstance(title, list) and len(title) == n_metrics:
+            plot_title = title[i]
+        else:
+            plot_title = title
+
+        ax.set_title(plot_title)
+
+        ax.set_xlabel(xlabel)
+
+        if ylabel is None:
+            ylabel_map = {
+                "sum": "Sum of pixel uncertainty",
+                "mean": "Mean pixel uncertainty",
+                "var": "Variance of pixel uncertainty",
+                "delta": "Change in uncertainty sum",
+                "mean_std": "Mean ± Std of pixel uncertainty",
+            }
+            ax.set_ylabel(ylabel_map.get(metric, "Uncertainty"))
+        else:
+            ax.set_ylabel(ylabel)
+
+        ax.grid(True)
+        ax.legend(title="Labels")
+
+    # Hide any unused subplots if metrics < nrows*ncols
+    for j in range(n_metrics, nrows * ncols):
+        fig.delaxes(axs[j])
+
+    plt.tight_layout()
 
     if save_path:
         plt.savefig(save_path, bbox_inches="tight")
-        plt.close()
+        plt.close(fig)
     else:
         plt.show()

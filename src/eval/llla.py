@@ -4,7 +4,7 @@ from src.models.flow import UQFlowMatching
 from src.models.llla_model import LaplaceApproxModel
 from src.utils.data import get_llla_dataloader
 from src.utils.environment import get_device, load_pretrained_model
-from src.utils.plots import plot_image_uncertainty_grid
+from src.utils.plots import plot_interleaved_image_uncertainty
 
 
 def main():
@@ -47,20 +47,8 @@ def main():
         model, train_loader, args=None, config=mnist_config
     )
 
-    mnist_config = SimpleNamespace()
-    mnist_config.data = SimpleNamespace()
-    mnist_config.data.image_size = 28  # MNIST image size
-    # Wrap diffusion model with your Custom Model for Laplace last layer approx
-    # NOTE: Automatically call fit
-    laplace_model = LaplaceApproxModel(
-        model, train_loader, args=None, config=mnist_config
-    )
-
     # NOTE:
     # You can use custom_model.forward or custom_model.accurate_forward for predictions
-
-    # Initialize uncertainty-aware diffusion (same interface as base class)
-    flow = UQFlowMatching(img_size=28, device=device)
 
     total_steps = 20
     num_intermediate = 15
@@ -68,19 +56,8 @@ def main():
     # Initialize uncertainty-aware diffusion (same interface as base class)
     flow = UQFlowMatching(img_size=mnist_config.data.image_size, device=device)
 
-    all_samples_grouped, uncertainties = plot_image_uncertainty_grid(
-        model=laplace_model,
-        method_instance=flow,
-        num_intermediate=num_intermediate,
-        n=1,
-        total_steps=total_steps,
-        save_dir=save_dir,
-        device=device,
-        num_classes=num_classes,
-        cov_num_sample=100,
-        # uq_cmp = "viridis",
-        uq_cmp="grey",
-    )
+    # FIX: Needs to be fixed taking inspiration from the notebook
+    # TODO: Implement the remaining code
 
 
 if __name__ == "__main__":

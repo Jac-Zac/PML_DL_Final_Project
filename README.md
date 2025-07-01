@@ -9,10 +9,9 @@
 
 ### Added but to review
 
-- [ ] Add the new plotting fuction to the plot code
+- [ ] Fix diffiusion DDIM
+- [ ] Improve repository structure
 - [ ] Flow Matching Review where Insereting FILM conditioning inside all the model for more stability [chat](https://chatgpt.com/share/686007aa-c180-8008-ae25-ba41169ff163)
-- [ ] LLM model
-- [ ] Create plots of how much is the uncertainty during the de-noising step if it increases monotonically or something (For Ansuini)
 
 ## 🧪 Running the Project
 

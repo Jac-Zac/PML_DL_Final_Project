@@ -56,7 +56,7 @@ def main():
     model_kwargs = {
         "num_classes": num_classes,
         "time_emb_dim": 128,
-        # NOTE: Change time embedding to learned for flow which is more sensible
+        # FIX: Make only mlp time embedding possible
         "time_embedding_type": "mlp" if args.method == "flow" else "sinusoidal",
     }
 

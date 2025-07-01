@@ -33,32 +33,28 @@ def plot_image_grid(
 
     # Choose timesteps depending on method type
     if method_instance.__class__.__name__ == "FlowMatching":
-        t_sample_times = torch.linspace(
-            0, num_steps - 1, steps=num_intermediate, dtype=torch.int32
-        ).tolist()
-
-        all_samples_grouped = method_instance.sample(
+        all_samples = method_instance.sample(
             model,
             steps=num_steps,
             log_intermediate=True,
-            t_sample_times=t_sample_times,
             y=y,
         )
     else:  # Diffusion
-        t_sample_times = torch.linspace(
-            num_steps, 0, steps=num_intermediate, dtype=torch.int32
-        ).tolist()
-
-        all_samples_grouped = method_instance.sample(
+        all_samples = method_instance.sample(
             model,
-            t_sample_times=t_sample_times,
             log_intermediate=True,
             y=y,
         )
 
     # (T, B, C, H, W) -> (B, T, C, H, W)
-    stacked = torch.stack(all_samples_grouped)
-    permuted = stacked.permute(1, 0, 2, 3, 4)
+
+    T = all_samples.shape[0]  # Total time steps
+    indices = torch.linspace(
+        0, T - 1, steps=num_intermediate
+    ).long()  # Generate indices
+    selected_samples = all_samples[indices]  # Direct indexing
+    permuted = selected_samples.permute(1, 0, 2, 3, 4)
+
     num_samples, num_timesteps = permuted.shape[:2]
 
     out_path = os.path.join(save_dir, "all_samples_grid.png")
@@ -79,7 +75,7 @@ def plot_image_grid(
             ax.imshow(img, cmap="gray")
             ax.axis("off")
             if row == 0:
-                ax.set_title(f"step={t_sample_times[col]}", fontsize=10)
+                ax.set_title(f"step={col}", fontsize=10)
             if col == 0:
                 ax.set_ylabel(f"Sample {row+1}", fontsize=10)
 

@@ -80,7 +80,7 @@ class Diffusion:
         channels: int = 1,
         y: Optional[Tensor] = None,
         log_intermediate: bool = False,
-    ) -> List[Tensor]:
+    ) -> Tensor:
         model.eval()
         batch_size = 1 if y is None else y.size(0)
         x_t = torch.randn(
@@ -96,6 +96,7 @@ class Diffusion:
                 intermediates.append(self.transform_sampled_image(x_t.clone()))
 
         intermediates.append(self.transform_sampled_image(x_t))
+        intermediates = torch.stack(intermediates)  # [n_steps, B, C, H, W]
         model.train()
         return intermediates
 

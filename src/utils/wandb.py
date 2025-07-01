@@ -99,9 +99,7 @@ def save_best_model_artifact(
     print(f"New best model saved! Epoch {epoch}, Val Loss: {val_loss:.4f}")
 
 
-def log_sample_grid(
-    model, method_instance, num_samples=5, num_timesteps=6, max_timesteps=1000
-):
+def log_sample_grid(model, method_instance, num_samples=5, num_timesteps=6):
     """Generate and log sample grid showing the generative process."""
 
     # Create batch of conditioning labels [0, 1, 2, ..., num_samples-1]
@@ -114,35 +112,28 @@ def log_sample_grid(
     ):
         # For flow matching: sample step indices evenly distributed
         # Flow matching goes from step 0 to steps-1, so we want to see intermediate steps
-        steps = 100  # or whatever you use for sampling steps
-        step_indices = torch.linspace(
-            0, steps - 1, steps=num_timesteps, dtype=torch.int32
-        ).tolist()
+        steps = 20  # or whatever you use for sampling steps
 
-        all_samples_grouped = method_instance.sample(
+        all_samples = method_instance.sample(
             model,
             steps=steps,
             log_intermediate=True,
-            t_sample_times=step_indices,  # Pass step indices
             y=y,
         )
     else:
-        # For diffusion: use timestep values (original approach)
-        t_sample_times = torch.linspace(
-            max_timesteps, 0, steps=num_timesteps, dtype=torch.int32
-        ).tolist()
-
-        all_samples_grouped = method_instance.sample(
+        # all_samples_grouped shape: (T, B, C, H, W)
+        all_samples = method_instance.sample(
             model,
-            t_sample_times=t_sample_times,
             log_intermediate=True,
             y=y,
         )
 
-    # all_samples_grouped shape: (T, B, C, H, W)
+    T = all_samples.shape[0]  # Total time steps
+    indices = torch.linspace(0, T - 1, steps=num_timesteps).long()  # Generate indices
+    selected_samples = all_samples[indices]  # Direct indexing
+
     # Rearrange to (B, T, C, H, W)
-    stacked = torch.stack(all_samples_grouped)  # (T, B, C, H, W)
-    permuted = stacked.permute(1, 0, 2, 3, 4)  # (B, T, C, H, W)
+    permuted = selected_samples.permute(1, 0, 2, 3, 4)  # (B, T, C, H, W)
 
     # For each sample in batch, create a horizontal grid of its timesteps
     rows = []

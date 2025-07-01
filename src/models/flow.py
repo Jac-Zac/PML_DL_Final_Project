@@ -78,7 +78,6 @@ class FlowMatching:
         y: Optional[Tensor] = None,
         x_init: Optional[Tensor] = None,
         log_intermediate: bool = False,
-        t_sample_times: Optional[list[int]] = None,
     ) -> list[Tensor]:
         """
         Generate samples by integrating predicted velocity fields over time.
@@ -120,7 +119,7 @@ class FlowMatching:
             v = model(x_t, t, y=y)  # predicted velocity dx/dt
             x_t = x_t + v * dt  # Euler (explicit) integration step
 
-            if log_intermediate and t_sample_times and i in t_sample_times:
+            if log_intermediate:
                 results.append(self.transform_sampled_image(x_t.clone()))
 
         return results

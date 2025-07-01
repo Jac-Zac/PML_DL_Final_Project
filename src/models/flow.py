@@ -78,7 +78,7 @@ class FlowMatching:
         y: Optional[Tensor] = None,
         x_init: Optional[Tensor] = None,
         log_intermediate: bool = False,
-    ) -> list[Tensor]:
+    ) -> Tensor:
         """
         Generate samples by integrating predicted velocity fields over time.
 
@@ -122,6 +122,7 @@ class FlowMatching:
             if log_intermediate:
                 results.append(self.transform_sampled_image(x_t.clone()))
 
+        results = torch.stack(results) if results else torch.tensor([])
         return results
 
     @staticmethod
@@ -254,8 +255,14 @@ class UQFlowMatching(FlowMatching):
             x_t_var = x_succ_var
             cov_t = covariance
 
-        intermediates = torch.stack(intermediates)  # [num_steps, B, C, H, W]
-        uncertainties = torch.stack(uncertainties)  # [num_steps, B, C, H, W]
+        # [num_steps, B, C, H, W]
+        uncertainties = (
+            torch.stack(uncertainties) if uncertainties else torch.tensor([])
+        )
+        # [num_steps, B, C, H, W]
+        intermediates = (
+            torch.stack(intermediates) if intermediates else torch.tensor([])
+        )
 
         model.train()
         return intermediates, uncertainties

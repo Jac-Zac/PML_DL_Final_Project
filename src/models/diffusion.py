@@ -263,8 +263,14 @@ class UQDiffusion(Diffusion):
             x_t_var = x_prev_var
             cov_t = covariance
 
-        uncertainties = torch.stack(uncertainties)  # [n_steps, B, C, H, W]
-        intermediates = torch.stack(intermediates)  # [n_steps, B, C, H, W]
+        # [num_steps, B, C, H, W]
+        uncertainties = (
+            torch.stack(uncertainties) if uncertainties else torch.tensor([])
+        )
+        # [num_steps, B, C, H, W]
+        intermediates = (
+            torch.stack(intermediates) if intermediates else torch.tensor([])
+        )
 
         model.train()
         return intermediates, uncertainties

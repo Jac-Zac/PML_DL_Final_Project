@@ -136,18 +136,27 @@ def plot_interleaved_image_uncertainty(
         figsize=(1.5 * T, 1.5 * 2 * B),
     )
 
-    # Make sure axes is 2D array even if B=1 or T=1
-    if T == 1:
-        axes = np.expand_dims(axes, 1)
-    if B == 1:
-        axes = np.expand_dims(axes, 0)
+    # Ensure axes is a 2D array
+    if isinstance(axes, plt.Axes):
+        axes = np.array([[axes]])
+    elif isinstance(axes, np.ndarray):
+        if axes.ndim == 1:
+            if T == 1:
+                axes = axes[:, np.newaxis]
+            elif 2 * B == 1:
+                axes = axes[np.newaxis, :]
 
     all_unc_values = []
     unc_images = []
 
     for row in range(B):
         for col in range(T):
-            img = images[row, col].squeeze().cpu().numpy()
+            img = images[row, col].cpu().numpy()
+            if img.shape[0] == 1:
+                img = img[0]  # Remove channel dim if single-channel
+            else:
+                img = np.transpose(img, (1, 2, 0))  # CxHxW → HxWxC
+
             unc = uncertainties[row, col].squeeze().cpu().numpy()
             all_unc_values.append(unc)
 
@@ -186,8 +195,8 @@ def plot_uncertainty_sums(
     figsize=(10, 6),
     colormap="viridis",
     title="Sum of uncertainties over spatial dimensions",
-    xlabel="Index in first dimension",
-    ylabel="Sum over spatial dimensions",
+    xlabel="Steps",
+    ylabel="Sum of pixels uncertainty",
     save_path=None,
 ):
     """

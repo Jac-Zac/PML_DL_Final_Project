@@ -245,10 +245,9 @@ class UQDiffusion(Diffusion):
                 print(
                     f"  eps_var mean: {eps_var.mean().item():.4e}, std: {eps_var.std().item():.4e}"
                 )
-                if i > 0:
-                    print(
-                        f"  Covariance mean: {covariance.mean().item():.4e}, std: {covariance.std().item():.4e}"
-                    )
+                print(
+                    f"  Covariance mean: {cov_t.mean().item():.4e}, std: {cov_t.std().item():.4e}"
+                )
                 print(
                     f"  x_t_var mean: {x_t_var.mean().item():.4e}, std: {x_t_var.std().item():.4e}"
                 )

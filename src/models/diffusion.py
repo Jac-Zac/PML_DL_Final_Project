@@ -214,20 +214,18 @@ class UQDiffusion(Diffusion):
             # Mean and x_t-1
             coef1 = 1.0 / alpha_t.sqrt()
             coef2 = (1.0 - alpha_t) / (1.0 - alpha_bar_t).sqrt()
+
             x_prev_mean = coef1 * (x_t_mean - coef2 * eps_mean)
             x_prev = (
                 coef1 * (x_t - coef2 * eps_t) + torch.randn_like(x_t) * beta_t.sqrt()
             )
 
             # Variance
-            coef3 = 2 * (1 - alpha_t) / alpha_t * (1 - alpha_bar_t).sqrt()
-            coef4 = (1 - alpha_t) ** 2 / alpha_t * (1 - alpha_bar_t)
+            coef3 = 2 * (1 - alpha_t) / (alpha_t * (1 - alpha_bar_t).sqrt())
+            coef4 = (1 - alpha_t) ** 2 / (alpha_t * (1 - alpha_bar_t))
             x_prev_var = (
                 (1 / alpha_t * x_t_var) - (coef3 * cov_t) + (coef4 * eps_var) + beta_t
             )
-            # (1 / alpha_t * x_t_var)
-            # + (coef4 * eps_var)
-            # + beta_t
 
             if i > 0:
                 # Covariance estimation with Monte Carlo
@@ -269,4 +267,148 @@ class UQDiffusion(Diffusion):
         intermediates = torch.stack(intermediates)  # [n_steps, B, C, H, W]
 
         model.train()
+        return intermediates, uncertainties
+
+    @torch.no_grad()
+    def sample_with_uncertainty_ddim(
+        self,
+        model: nn.Module,
+        channels: int = 1,
+        y: Optional[Tensor] = None,
+        cov_num_sample: int = 10,
+        sampling_steps: int = 50,
+        eta: float = 0.0,
+        log_intermediate: bool = True,
+    ) -> Tuple[Tensor, Tensor]:
+        """
+        Iteratively sample from the model using DDIM with uncertainty tracking.
+
+        Args:
+            model: Denoising model.
+            channels: Number of channels in the image.
+            y: Optional conditioning.
+            cov_num_sample: Monte Carlo samples for covariance estimation.
+            sampling_steps: Number of inference steps (≤ self.noise_steps).
+            eta: Stochasticity (0 = deterministic DDIM, 1 = DDPM-like).
+            log_intermediate: Whether to store intermediate outputs.
+
+        Returns:
+            Tuple of tensors: (intermediates, uncertainties)
+        """
+        model.eval()
+        batch_size = 1 if y is None else y.size(0)
+
+        # Define the time schedule
+        step_indices = (
+            torch.linspace(0, self.noise_steps - 1, sampling_steps)
+            .long()
+            .to(self.device)
+        )
+
+        # Use alpha_bar (cumulative product) instead of alpha
+        alphas_bar = self.alpha_bar[step_indices].to(self.device)
+
+        x_t = torch.randn(
+            batch_size, channels, self.img_size, self.img_size, device=self.device
+        )
+        x_t_mean = x_t.clone()
+        x_t_var = torch.zeros_like(x_t)
+        cov_t = torch.zeros_like(x_t)
+
+        intermediates, uncertainties = [], []
+
+        for i in tqdm(
+            list(reversed(range(sampling_steps))), desc="Sampling", leave=False
+        ):
+            t = step_indices[i].expand(batch_size)
+
+            # Get noise prediction and its variance
+            eps_mean, eps_var = model(x_t, t, y=y)
+            eps_t = eps_mean + torch.sqrt(eps_var) * torch.randn_like(eps_mean)
+
+            # Current alpha_bar
+            alpha_t = alphas_bar[i].view(-1, 1, 1, 1)
+            sigma_t = torch.sqrt(1 - alpha_t)
+
+            if i > 0:
+                # Next alpha_bar
+                alpha_t_prev = alphas_bar[i - 1].view(-1, 1, 1, 1)
+                sigma_t_prev = torch.sqrt(1 - alpha_t_prev)
+
+                # DDIM sampling step (following reference implementation)
+                # First predict x0
+                x0_pred = (x_t - eps_t * sigma_t) / torch.sqrt(alpha_t)
+
+                # DDIM step
+                x_prev = torch.sqrt(alpha_t_prev) * x0_pred + sigma_t_prev * eps_t
+
+                # Uncertainty propagation (following reference var_iteration)
+                compute_cov_coefficient = (
+                    torch.sqrt(alpha_t_prev) / torch.sqrt(alpha_t)
+                ) * (
+                    sigma_t_prev
+                    - (torch.sqrt(alpha_t_prev) / torch.sqrt(alpha_t)) * sigma_t
+                )
+
+                x_prev_var = (
+                    (alpha_t_prev / alpha_t) * x_t_var
+                    + 2 * compute_cov_coefficient * cov_t
+                    + torch.square(
+                        sigma_t_prev
+                        - (torch.sqrt(alpha_t_prev) / torch.sqrt(alpha_t)) * sigma_t
+                    )
+                    * eps_var
+                )
+
+                # Expectation update (following reference exp_iteration)
+                # Estimate eps_mean at current step using Monte Carlo if needed
+                mc_eps_mean = (
+                    eps_mean  # Simplified - you might want to do MC sampling here
+                )
+
+                x_prev_mean = (
+                    torch.sqrt(alpha_t_prev) / torch.sqrt(alpha_t)
+                ) * x_t_mean + (
+                    sigma_t_prev
+                    - (torch.sqrt(alpha_t_prev) / torch.sqrt(alpha_t)) * sigma_t
+                ) * mc_eps_mean
+
+                # Estimate Cov(x, ε) at next step
+                if i > 1:  # Don't compute covariance for the last step
+                    covariance = self.monte_carlo_covariance_estim(
+                        model=model,
+                        t=step_indices[i - 1].expand(batch_size),
+                        x_mean=x_prev_mean,
+                        x_var=x_prev_var,
+                        S=cov_num_sample,
+                        y=y,
+                    )
+                else:
+                    covariance = torch.zeros_like(cov_t)
+            else:
+                # Final step: just propagate the last state
+                x_prev = x_t
+                x_prev_mean = x_t_mean
+                x_prev_var = x_t_var
+                covariance = cov_t
+
+            if log_intermediate:
+                intermediates.append(self.transform_sampled_image(x_t.clone()))
+                uncertainties.append(x_t_var.clone().cpu())
+
+            # Update for next iteration
+            x_t = x_prev
+            x_t_mean = x_prev_mean
+            x_t_var = x_prev_var
+            cov_t = covariance
+
+        model.train()
+
+        uncertainties = (
+            torch.stack(uncertainties) if uncertainties else torch.tensor([])
+        )
+        intermediates = (
+            torch.stack(intermediates) if intermediates else torch.tensor([])
+        )
+
         return intermediates, uncertainties

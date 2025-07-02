@@ -123,7 +123,7 @@ def main():
         images=all_samples_grouped[:, slice_images, ...],
         uncertainties=uncertainties[:, slice_images, ...],
         save_path=os.path.join(args.save_dir, "image_uncertainty_by_step"),
-        timesteps=np.linspace(0, args.steps - 1, 10, dtype=int).tolist(),
+        timesteps=np.linspace(1, args.steps, 10, dtype=int).tolist(),
         uq_cmp="viridis",
     )
 

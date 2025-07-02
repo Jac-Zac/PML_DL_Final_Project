@@ -167,7 +167,7 @@ def plot_interleaved_image_uncertainty(
             ax_img.imshow(img, cmap=img_cmap)
             ax_img.axis("off")
             if row == 0:
-                ax_img.set_title(f"step={timesteps[col]}", fontsize=10)
+                ax_img.set_title(f"interval={timesteps[col]}", fontsize=10)
             if col == 0:
                 ax_img.set_ylabel(f"Sample {row + 1}", fontsize=10)
 

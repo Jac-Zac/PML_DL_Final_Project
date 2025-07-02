@@ -193,7 +193,7 @@ def plot_interleaved_image_uncertainty(
 def plot_uncertainty_metric(
     uncertainties,
     samples=None,
-    metrics="sum",  # can be str or list of str
+    metrics=["sum"],  # can be str or list of str
     figsize=None,
     colormap="viridis",
     title=None,

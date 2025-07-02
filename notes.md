@@ -150,3 +150,17 @@
 - Seed control ensures reproducible results
 
 [Stable diffusion notes](https://www.youtube.com/watch?v=n233GPgOHJg)
+
+# Future things to review
+
+## Predictive mean and variance via Monte Carlo approximation
+
+Potentially this could be change we need to think about this!
+
+### No need for MC perhaps?
+
+```python
+  mean, var = self.conv_out_la(
+      feats, pred_type="nn", link_approx="mc", n_samples=100
+  )
+```

@@ -107,10 +107,15 @@ class LaplaceApproxModel(nn.Module):
             feats = self.feature_extractor(x, t, y=y)
 
         # Predictive mean and variance via Monte Carlo approximation
-        # NOTE: 100 is the number of samples showed in the paper
-        mean, var = self.conv_out_la(
-            feats, pred_type="nn", link_approx="mc", n_samples=100
-        )
+        # # NOTE: 100 is the number of samples showed in the paper
+        # # WARNING: Potentially this could be change we need to think about this !
+        # # No need for MC perhaps ?
+        # mean, var = self.conv_out_la(
+        #     feats, pred_type="nn", link_approx="mc", n_samples=100
+        # )
+
+        # Take the diagonal only of the close form
+        mean, var = self.conv_out_la(feats, pred_type="glm", diagonal_output=True)
 
         # Reshape [B, 784] -> [B, 1, 28, 28] for image-shaped output
         B = x.size(0)

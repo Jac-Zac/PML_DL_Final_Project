@@ -120,7 +120,7 @@ class FlowMatching:
             x_t = x_t + v * dt  # Euler (explicit) integration step
 
             if log_intermediate:
-                results.append(self.transform_sampled_image(x_t.clone()))
+                results.append(self.transform_sampled_image(x_t.clone().cpu()))
 
         results = torch.stack(results) if results else torch.tensor([])
         return results
@@ -213,7 +213,7 @@ class UQFlowMatching(FlowMatching):
         x_t_var = torch.zeros_like(x_t)
         cov_t = torch.zeros_like(x_t)
 
-        intermediates, uncertainties = [], []
+        intermediates, uncertainties = [x_t.clone().cpu()], [x_t_var.clone().cpu()]
         dt = 1.0 / num_steps
 
         for i in tqdm(range(num_steps), desc="Steps", leave=False):
@@ -247,8 +247,8 @@ class UQFlowMatching(FlowMatching):
 
             # Log intermediate images
             if log_intermediate:
-                intermediates.append(self.transform_sampled_image(x_t.clone()))
-                uncertainties.append(x_t_var.clone().cpu())  # per-pixel variance
+                intermediates.append(self.transform_sampled_image(x_succ.clone().cpu()))
+                uncertainties.append(x_succ_var.clone().cpu())  # per-pixel variance
 
             x_t = x_succ
             x_t_mean = x_succ_mean

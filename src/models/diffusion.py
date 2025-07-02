@@ -93,7 +93,7 @@ class Diffusion:
             x_t = self.sample_step(model, x_t, t, y)
 
             if log_intermediate:
-                intermediates.append(self.transform_sampled_image(x_t.clone()))
+                intermediates.append(self.transform_sampled_image(x_t.clone().cpu()))
 
         intermediates.append(self.transform_sampled_image(x_t))
         intermediates = torch.stack(intermediates)  # [n_steps, B, C, H, W]
@@ -174,6 +174,8 @@ class UQDiffusion(Diffusion):
 
         return covariance
 
+    # FIX: DDPM Very slow ... and perhaps not good results
+    """
     @torch.no_grad()
     def sample_with_uncertainty(
         self,
@@ -183,9 +185,8 @@ class UQDiffusion(Diffusion):
         cov_num_sample: int = 10,
         log_intermediate: bool = True,
     ) -> Tuple[Tensor, Tensor]:
-        """
-        Iteratively sample from the model, tracking predictive uncertainty and optionally Cov(x, ε).
-        """
+        # Iteratively sample from the model, tracking predictive uncertainty and optionally Cov(x, ε).
+
         model.eval()
         batch_size = 1 if y is None else y.size(0)
 
@@ -238,21 +239,6 @@ class UQDiffusion(Diffusion):
                     y=y,
                 )
 
-            if i % 100 == 0 or i == self.noise_steps - 1:
-                print(f"\nStep {i}")
-                print(
-                    f"  eps_var mean: {eps_var.mean().item():.4e}, std: {eps_var.std().item():.4e}"
-                )
-                print(
-                    f"  Covariance mean: {cov_t.mean().item():.4e}, std: {cov_t.std().item():.4e}"
-                )
-                print(
-                    f"  x_t_var mean: {x_t_var.mean().item():.4e}, std: {x_t_var.std().item():.4e}"
-                )
-                print(
-                    f"  x_prev_var mean: {x_prev_var.mean().item():.4e}, std: {x_prev_var.std().item():.4e}"
-                )
-
             # Log intermediate images
             if log_intermediate:
                 intermediates.append(self.transform_sampled_image(x_t.clone()))
@@ -274,16 +260,16 @@ class UQDiffusion(Diffusion):
 
         model.train()
         return intermediates, uncertainties
+    """
 
     @torch.no_grad()
-    def sample_with_uncertainty_ddim(
+    def sample_with_uncertainty(
         self,
         model: nn.Module,
         channels: int = 1,
         y: Optional[Tensor] = None,
         cov_num_sample: int = 10,
-        sampling_steps: int = 50,
-        eta: float = 0.0,
+        num_steps: int = 50,
         log_intermediate: bool = True,
     ) -> Tuple[Tensor, Tensor]:
         """
@@ -304,14 +290,12 @@ class UQDiffusion(Diffusion):
         model.eval()
         batch_size = 1 if y is None else y.size(0)
 
-        # Define the time schedule
+        # Define the time schedule - make sure to use proper dtype
         step_indices = (
-            torch.linspace(0, self.noise_steps - 1, sampling_steps)
-            .long()
-            .to(self.device)
+            torch.linspace(0, self.noise_steps - 1, num_steps).long().to(self.device)
         )
 
-        # Use alpha_bar (cumulative product) instead of alpha
+        # Use alpha_bar (cumulative alphas) for DDIM
         alphas_bar = self.alpha_bar[step_indices].to(self.device)
 
         x_t = torch.randn(
@@ -321,69 +305,57 @@ class UQDiffusion(Diffusion):
         x_t_var = torch.zeros_like(x_t)
         cov_t = torch.zeros_like(x_t)
 
-        intermediates, uncertainties = [], []
+        intermediates, uncertainties = [x_t_var.clone().cpu()], [x_t_var.clone().cpu()]
 
-        for i in tqdm(
-            list(reversed(range(sampling_steps))), desc="Sampling", leave=False
-        ):
+        for i in tqdm(list(reversed(range(num_steps))), desc="Sampling", leave=False):
             t = step_indices[i].expand(batch_size)
 
             # Get noise prediction and its variance
             eps_mean, eps_var = model(x_t, t, y=y)
             eps_t = eps_mean + torch.sqrt(eps_var) * torch.randn_like(eps_mean)
 
-            # Current alpha_bar
+            # Current timestep parameters
             alpha_t = alphas_bar[i].view(-1, 1, 1, 1)
+
+            # HACK: This is the code provided by Bayesdiff
             sigma_t = torch.sqrt(1 - alpha_t)
 
+            # Predict x0 using correct DDIM formula
+            x0_pred = (x_t - eps_t * sigma_t) / torch.sqrt(alpha_t)
+
             if i > 0:
-                # Next alpha_bar
+                # Next timestep parameters
                 alpha_t_prev = alphas_bar[i - 1].view(-1, 1, 1, 1)
                 sigma_t_prev = torch.sqrt(1 - alpha_t_prev)
 
-                # DDIM sampling step (following reference implementation)
-                # First predict x0
-                x0_pred = (x_t - eps_t * sigma_t) / torch.sqrt(alpha_t)
-
-                # DDIM step
+                # DDIM step: x_{t-1} = sqrt(alpha_{t-1}) * x0_pred + sqrt(1-alpha_{t-1}) * eps_t
                 x_prev = torch.sqrt(alpha_t_prev) * x0_pred + sigma_t_prev * eps_t
 
-                # Uncertainty propagation (following reference var_iteration)
-                compute_cov_coefficient = (
-                    torch.sqrt(alpha_t_prev) / torch.sqrt(alpha_t)
-                ) * (
-                    sigma_t_prev
-                    - (torch.sqrt(alpha_t_prev) / torch.sqrt(alpha_t)) * sigma_t
-                )
+                # Coefficients for uncertainty propagation (matching reference implementation)
+                coeff1 = torch.sqrt(alpha_t_prev) / torch.sqrt(
+                    alpha_t
+                )  # sqrt(alpha_{t-1}) / sqrt(alpha_t)
+                coeff2 = (
+                    sigma_t_prev - coeff1 * sigma_t
+                )  # sigma_{t-1} - coeff1 * sigma_t
 
+                # Mean iteration (expectation propagation)
+                x_prev_mean = coeff1 * x_t_mean + coeff2 * eps_mean
+
+                # Variance iteration (following the reference var_iteration formula)
                 x_prev_var = (
-                    (alpha_t_prev / alpha_t) * x_t_var
-                    + 2 * compute_cov_coefficient * cov_t
-                    + torch.square(
-                        sigma_t_prev
-                        - (torch.sqrt(alpha_t_prev) / torch.sqrt(alpha_t)) * sigma_t
-                    )
-                    * eps_var
+                    (coeff1**2) * x_t_var
+                    + 2 * coeff1 * coeff2 * cov_t
+                    + (coeff2**2) * eps_var
                 )
-
-                # Expectation update (following reference exp_iteration)
-                # Estimate eps_mean at current step using Monte Carlo if needed
-                mc_eps_mean = (
-                    eps_mean  # Simplified - you might want to do MC sampling here
-                )
-
-                x_prev_mean = (
-                    torch.sqrt(alpha_t_prev) / torch.sqrt(alpha_t)
-                ) * x_t_mean + (
-                    sigma_t_prev
-                    - (torch.sqrt(alpha_t_prev) / torch.sqrt(alpha_t)) * sigma_t
-                ) * mc_eps_mean
 
                 # Estimate Cov(x, ε) at next step
                 if i > 1:  # Don't compute covariance for the last step
+                    # Use the correct timestep for covariance estimation
+                    next_t = step_indices[i - 1].expand(batch_size)
                     covariance = self.monte_carlo_covariance_estim(
                         model=model,
-                        t=step_indices[i - 1].expand(batch_size),
+                        t=next_t,
                         x_mean=x_prev_mean,
                         x_var=x_prev_var,
                         S=cov_num_sample,
@@ -392,14 +364,14 @@ class UQDiffusion(Diffusion):
                 else:
                     covariance = torch.zeros_like(cov_t)
             else:
-                # Final step: just propagate the last state
-                x_prev = x_t
-                x_prev_mean = x_t_mean
-                x_prev_var = x_t_var
-                covariance = cov_t
+                # Final step: denoise to clean image (alpha_0 = 1, sigma_0 = 0)
+                x_prev = x0_pred  # At t=0, x_0 = x0_pred
+                x_prev_mean = (x_t_mean - sigma_t * eps_mean) / torch.sqrt(alpha_t)
+                x_prev_var = x_t_var / alpha_t + (sigma_t**2) * eps_var / alpha_t
+                covariance = torch.zeros_like(cov_t)
 
             if log_intermediate:
-                intermediates.append(self.transform_sampled_image(x_t.clone()))
+                intermediates.append(self.transform_sampled_image(x_t.clone().cpu()))
                 uncertainties.append(x_t_var.clone().cpu())
 
             # Update for next iteration

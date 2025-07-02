@@ -207,9 +207,9 @@ class UQDiffusion(Diffusion):
             eps_t = eps_mean + torch.sqrt(eps_var) * torch.randn_like(eps_mean)
 
             # Compute xt-1
-            beta_t = self.beta[t].view(-1, 1, 1, 1)
-            alpha_t = self.alpha[t].view(-1, 1, 1, 1)
-            alpha_bar_t = self.alpha_bar[t].view(-1, 1, 1, 1)
+            beta_t = self.beta[self.noise_steps - 1 - t].view(-1, 1, 1, 1)
+            alpha_t = self.alpha[self.noise_steps - 1 - t].view(-1, 1, 1, 1)
+            alpha_bar_t = self.alpha_bar[self.noise_steps - 1 - t].view(-1, 1, 1, 1)
 
             # Mean and x_t-1
             coef1 = 1.0 / alpha_t.sqrt()

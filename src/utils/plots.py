@@ -88,8 +88,8 @@ def plot_image_grid(
 def plot_interleaved_image_uncertainty(
     images: torch.Tensor,
     uncertainties: torch.Tensor,
-    save_path: str,
     timesteps: list,
+    save_path: str,
     uq_cmp: str = "viridis",
     img_cmap: str = "gray",
     mult: float = 700.0,

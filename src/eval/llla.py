@@ -58,6 +58,12 @@ def main():
 
     # FIX: Needs to be fixed taking inspiration from the notebook
     # TODO: Implement the remaining code
+    # Flow Numbers 1/0 plots
+
+    # TODO:
+    # And pants plot for both Flow and Diffusion
+    # + Plot of pants jsut last step for both
+    # Create Only sum plot
 
 
 if __name__ == "__main__":

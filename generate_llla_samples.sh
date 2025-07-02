@@ -1,5 +1,6 @@
 
 # TODO: Implement something on this line to generate images for mnist and FashionMNIST with LLLA for flow and diffusion
+# Just use this to amke all of our plots for MNIST and FashionMNIST for Flow and Diffusion
  
 # # for imagenet dataset
 # DEVICES="0"

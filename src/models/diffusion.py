@@ -95,7 +95,7 @@ class Diffusion:
             if log_intermediate:
                 intermediates.append(self.transform_sampled_image(x_t.clone().cpu()))
 
-        intermediates.append(self.transform_sampled_image(x_t))
+        intermediates.append(self.transform_sampled_image(x_t.clone().cpu()))
         intermediates = torch.stack(intermediates)  # [n_steps, B, C, H, W]
         model.train()
         return intermediates

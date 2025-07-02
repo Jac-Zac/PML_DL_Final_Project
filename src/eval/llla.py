@@ -156,6 +156,7 @@ def main():
         uncertainties,
         metrics=["sum"],
         save_path=os.path.join(args.save_dir, "sum_image_uncertainty"),
+        colormap="tab10",
     )
 
 

@@ -1,21 +1,18 @@
 #!/bin/bash
 
-# Set your common config
-# NOTE: Train those two
-# CKPT_FLOW_MNIST="jac-zac/bayesflow-project/best-model:v145"
-# CKPT_DIFF_MNIST="jac-zac/bayesflow-project/best-model:v145"
-
+# Checkpoints for each dataset + method
+# CKPT_FLOW_MNIST="jac-zac/bayesflow-project/best-model:vXXX"
+# CKPT_DIFF_MNIST="jac-zac/bayesflow-project/best-model:vYYY"
 CKPT_FLOW_FASHION="jac-zac/bayesflow-project/best-model:v127"
 CKPT_DIFF_FASHION="jac-zac/bayesflow-project/best-model:v145"
 
 METHODS=("flow" "diffusion")
-# DATASETS=("MNIST" "FashionMNIST")
-DATASETS=("FashionMNIST")
+DATASETS=("FashionMNIST")  # Add "MNIST" if needed
 
 for dataset in "${DATASETS[@]}"; do
   for method in "${METHODS[@]}"; do
 
-    # Choose checkpoint based on dataset and method
+    # Select checkpoint
     if [ "$dataset" == "MNIST" ]; then
       if [ "$method" == "flow" ]; then
         CKPT=$CKPT_FLOW_MNIST
@@ -30,17 +27,27 @@ for dataset in "${DATASETS[@]}"; do
       fi
     fi
 
-    # Set the number of steps based on method
+    # Set diffusion or flow step count
     if [ "$method" == "flow" ]; then
       STEPS=15
     else
       STEPS=50
     fi
 
-    # Set the output directory
-    SAVE_DIR="plots/$(echo "${dataset}" | tr '[:upper:]' '[:lower:]')_${method}"
+    # Set slice indices based on dataset and method
+    if [ "$dataset" == "FashionMNIST" ]; then
+      SLICE_START=1
+      SLICE_END=2
+    else
+      SLICE_START=0
+      SLICE_END=2
+    fi
 
-    echo "Generating plots for $dataset with $method (steps=$STEPS)..."
+    # Output directory
+    SAVE_DIR="plots/$(echo "$dataset" | tr '[:upper:]' '[:lower:]')_${method}"
+
+    echo "Running $dataset with $method, steps=$STEPS, slice=[$SLICE_START:$SLICE_END]"
+
     python -m src.eval.llla \
       --ckpt "$CKPT" \
       --dataset-name "$dataset" \
@@ -48,6 +55,9 @@ for dataset in "${DATASETS[@]}"; do
       --save-dir "$SAVE_DIR" \
       --batch-size 16 \
       --steps "$STEPS" \
-      --cov-samples 100
+      --cov-samples 100 \
+      --slice-start "$SLICE_START" \
+      --slice-end "$SLICE_END"
+
   done
 done

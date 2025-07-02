@@ -41,6 +41,13 @@ def parse_args():
         "--save-dir", type=str, default="samples", help="Directory to save output plots"
     )
     parser.add_argument("--batch-size", type=int, default=16, help="Sample batch size")
+
+    parser.add_argument(
+        "--slice-start", type=int, default=0, help="Start index for image slice"
+    )
+    parser.add_argument(
+        "--slice-end", type=int, default=2, help="End index for image slice"
+    )
     parser.add_argument(
         "--cov-samples",
         type=int,
@@ -61,7 +68,7 @@ def main():
     args = parse_args()
     device = get_device()
     num_classes = 10
-    slice_images = slice(1, 2)  # Just a slice of all of the images generated
+    slice_images = slice(args.slice_start, args.slice_end)
 
     os.makedirs(args.save_dir, exist_ok=True)
 
@@ -113,9 +120,9 @@ def main():
 
     # Interleaved image + uncertainty plots
     plot_interleaved_image_uncertainty(
-        images=all_samples_grouped,
-        uncertainties=uncertainties,
-        save_path=os.path.join(args.save_dir, "all_interleaved_image_uncertainty"),
+        images=all_samples_grouped[:, slice_images, ...],
+        uncertainties=uncertainties[:, slice_images, ...],
+        save_path=os.path.join(args.save_dir, "image_uncertainty_by_step"),
         timesteps=np.linspace(0, args.steps - 1, 10, dtype=int).tolist(),
         uq_cmp="viridis",
     )
@@ -124,8 +131,8 @@ def main():
     plot_interleaved_image_uncertainty(
         images=all_samples_grouped[:, slice_images, ...],
         uncertainties=uncertainties[:, slice_images, ...],
-        save_path=os.path.join(args.save_dir, "interleaved_image_uncertainty"),
-        timesteps=np.linspace(0, args.steps - 1, 10, dtype=int).tolist(),
+        save_path=os.path.join(args.save_dir, "image_uncertainty_single"),
+        timesteps=[args.steps],
         uq_cmp="viridis",
     )
 

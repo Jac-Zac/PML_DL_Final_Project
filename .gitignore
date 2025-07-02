@@ -40,4 +40,5 @@
 **/wandb/*
 **/data/*
 **/samples/*
+**/plots/*
 **/artifacts/*

@@ -1,23 +1,53 @@
+#!/bin/bash
 
-# TODO: Implement something on this line to generate images for mnist and FashionMNIST with LLLA for flow and diffusion
-# Just use this to amke all of our plots for MNIST and FashionMNIST for Flow and Diffusion
- 
-# # for imagenet dataset
-# DEVICES="0"
-# data="imagenet128_guided"
-# steps="250"
-# mc_size="10"
-# sample_batch_size="16"
-# total_n_sample="96"
-# # the size of dataset used for Laplace approximation: size_of_total_dataset//train_la_data_size
-# train_la_data_size="50"
-# DIS="uniform"
-# fixed_class="0"
-#
-# CUDA_VISIBLE_DEVICES=$DEVICES python ddpm_skipUQ.py \
-# --config $data".yml" --timesteps=$steps --skip_type=$DIS --train_la_batch_size 32 \
-# --mc_size=$mc_size --sample_batch_size=$sample_batch_size --fixed_class=$fixed_class --train_la_data_size=$train_la_data_size \
-# --total_n_sample=$total_n_sample --fixed_class=$fixed_class --seed=1234
+# Set your common config
+# NOTE: Train those two
+# CKPT_FLOW_MNIST="jac-zac/bayesflow-project/best-model:v145"
+# CKPT_DIFF_MNIST="jac-zac/bayesflow-project/best-model:v145"
 
-# Call something like this
-# python -m src.eval.generate --n 5 --method="flow"
+CKPT_FLOW_FASHION="jac-zac/bayesflow-project/best-model:v127"
+CKPT_DIFF_FASHION="jac-zac/bayesflow-project/best-model:v145"
+
+METHODS=("flow" "diffusion")
+# DATASETS=("MNIST" "FashionMNIST")
+DATASETS=("FashionMNIST")
+
+for dataset in "${DATASETS[@]}"; do
+  for method in "${METHODS[@]}"; do
+
+    # Choose checkpoint based on dataset and method
+    if [ "$dataset" == "MNIST" ]; then
+      if [ "$method" == "flow" ]; then
+        CKPT=$CKPT_FLOW_MNIST
+      else
+        CKPT=$CKPT_DIFF_MNIST
+      fi
+    else
+      if [ "$method" == "flow" ]; then
+        CKPT=$CKPT_FLOW_FASHION
+      else
+        CKPT=$CKPT_DIFF_FASHION
+      fi
+    fi
+
+    # Set the number of steps based on method
+    if [ "$method" == "flow" ]; then
+      STEPS=15
+    else
+      STEPS=50
+    fi
+
+    # Set the output directory
+    SAVE_DIR="plots/$(echo "${dataset}" | tr '[:upper:]' '[:lower:]')_${method}"
+
+    echo "Generating plots for $dataset with $method (steps=$STEPS)..."
+    python -m src.eval.llla \
+      --ckpt "$CKPT" \
+      --dataset-name "$dataset" \
+      --method "$method" \
+      --save-dir "$SAVE_DIR" \
+      --batch-size 16 \
+      --steps "$STEPS" \
+      --cov-samples 100
+  done
+done

@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Checkpoints for each dataset + method
-# CKPT_FLOW_MNIST="jac-zac/bayesflow-project/best-model:vXXX"
-# CKPT_DIFF_MNIST="jac-zac/bayesflow-project/best-model:vYYY"
+CKPT_FLOW_MNIST="jac-zac/bayesflow-project/best-model:v204"
+CKPT_DIFF_MNIST="jac-zac/bayesflow-project/best-model:v174"
 CKPT_FLOW_FASHION="jac-zac/bayesflow-project/best-model:v127"
 CKPT_DIFF_FASHION="jac-zac/bayesflow-project/best-model:v145"
 

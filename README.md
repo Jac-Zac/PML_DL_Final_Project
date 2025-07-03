@@ -1,4 +1,4 @@
-# BayesFlow: And extension of BayesDiff to Flow matching
+# BayesFlow: Extension of BayesDiff to Flow matching
 
 ... Some nice plots here ...
 
@@ -48,10 +48,48 @@ python -m src.eval.generate --n 10
 ./generate_llla_samples.sh
 ```
 
-### Additional results
+### Project Structure
 
-Write some code inspired by the paper to use a better pre-trained model to showcase some nice results
+```bash
+.
+├── notebooks # Notebooks for experiments
+│   ├── notebook_llla_diff.ipynb
+│   ├── notebook_llla_flow.ipynb
+│   ├── notebook_train_diff.ipynb
+│   └── notebook_train_flow.ipynb
+├── src # Main part of the code
+│   ├── eval
+│   │   ├── generate.py
+│   │   └── llla.py # Code to perform llla fit and make plots with it
+│   ├── models
+│   │   ├── __init__.py
+│   │   ├── diffusion.py
+│   │   ├── flow.py
+│   │   ├── llla_model.py # Wrapper of the unet with LLLA
+│   │   └── unet.py
+│   ├── train # Train code for Flow/Diff on MNIST/Fashion-MNIST
+│   │   ├── __init__.py
+│   │   ├── run.py
+│   │   └── train.py
+│   ├── utils # Utilities for model training logging, loading and plots
+│   │   ├── __init__.py
+│   │   ├── data.py
+│   │   ├── environment.py
+│   │   ├── plots.py
+│   │   └── wandb.py
+│   └── __init__.py
+├── generate_llla_samples.sh # Script to generate plots
+├── notes.md # Additional Notes
+├── README.md
+└── requirements.txt
+```
 
 ## References
 
-...
+- _Kou, S., Gan, L., Wang, D., Li, C., & Deng, Z. (2023). BayesDiff: Estimating Pixel-wise Uncertainty in Diffusion via Bayesian Inference. arXiv:2310.11142_
+
+- _Daxberger, E., Kristiadi, A., Immer, A., Eschenhagen, R., Bauer, M., & Hennig, P. (2022). Laplace Redux -- Effortless Bayesian Deep Learning. arXiv:2106.14806_
+
+- _Lipman, Y., Havasi, M., Holderrieth, P., Shaul, N., Le, M., Karrer, B., Chen, R. T. Q., Lopez-Paz, D., Ben-Hamu, H., & Gat, I. (2024). Flow Matching Guide and Code. arXiv:2412.06264_
+
+- _Kristiadi, A., Hein, M., & Hennig, P. (2020). Being Bayesian, Even Just a Bit, Fixes Overconfidence in ReLU Networks [Conference presentation]. arXiv:2002.10118_

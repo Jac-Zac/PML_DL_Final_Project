@@ -151,10 +151,34 @@ def main():
         }
     )
 
-    # Uncertainty metric plot (e.g., sum)
+    # Define class label maps
+    FASHION_MNIST_CLASSES = {
+        0: "T-shirt/top",
+        1: "Trouser",
+        2: "Pullover",
+        3: "Dress",
+        4: "Coat",
+        5: "Sandal",
+        6: "Shirt",
+        7: "Sneaker",
+        8: "Bag",
+        9: "Ankle boot",
+    }
+
+    MNIST_CLASSES = {i: str(i) for i in range(10)}
+
+    # Choose correct label map
+    label_map = (
+        FASHION_MNIST_CLASSES
+        if args.dataset_name.lower() == "fashion-mnist"
+        else MNIST_CLASSES
+    )
+
+    # Plot with label names
     plot_uncertainty_metric(
         uncertainties,
         metrics=["sum"],
+        label_map=label_map,
         save_path=os.path.join(args.save_dir, "sum_image_uncertainty"),
         colormap="tab10",
     )

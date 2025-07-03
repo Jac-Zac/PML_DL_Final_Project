@@ -200,6 +200,7 @@ def plot_uncertainty_metric(
     xlabel="Steps",
     ylabel=None,
     save_path=None,
+    label_map=None,
 ):
     """
     Plot one or multiple metrics of uncertainty over spatial dims for each label/sample.
@@ -277,11 +278,12 @@ def plot_uncertainty_metric(
             elif metric == "mean_std":
                 means = data.mean(axis=(-1, -2))
                 stds = data.std(axis=(-1, -2))
+                label_name = label_map[label_idx] if label_map else f"Label {label_idx}"
                 ax.errorbar(
                     range(T),
                     means,
                     yerr=stds,
-                    label=f"Label {label_idx}",
+                    label=label_name,
                     color=cmap(idx),
                     capsize=3,
                     fmt="o-",
@@ -290,15 +292,15 @@ def plot_uncertainty_metric(
             else:
                 raise ValueError(f"Unsupported metric: {metric}")
 
-            ax.plot(
-                steps,
-                values,
-                marker="o",
-                linestyle="-",
-                color=cmap(idx),
-                label=f"Label {label_idx}",
-            )
-
+        label_name = label_map[label_idx] if label_map else f"Label {label_idx}"
+        ax.plot(
+            steps,
+            values,
+            marker="o",
+            linestyle="-",
+            color=cmap(idx),
+            label=label_name,
+        )
         # Titles and labels
         if title is None:
             plot_title = (

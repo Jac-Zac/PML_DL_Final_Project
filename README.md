@@ -2,6 +2,8 @@
 
 ... Some nice plots here ...
 
+[Training Runs Report](https://api.wandb.ai/links/jac-zac/h0ack55v)
+
 ## 🧪 Running the Project
 
 - Create the virtual environment

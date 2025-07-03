@@ -7,7 +7,7 @@ CKPT_FLOW_FASHION="jac-zac/bayesflow-project/best-model:v127"
 CKPT_DIFF_FASHION="jac-zac/bayesflow-project/best-model:v145"
 
 METHODS=("flow" "diffusion")
-DATASETS=("FashionMNIST")  # Add "MNIST" if needed
+DATASETS=("FashionMNIST" "MNIST")
 
 for dataset in "${DATASETS[@]}"; do
   for method in "${METHODS[@]}"; do
@@ -29,7 +29,11 @@ for dataset in "${DATASETS[@]}"; do
 
     # Set diffusion or flow step count
     if [ "$method" == "flow" ]; then
-      STEPS=15
+      if [ "$dataset" == "MNIST" ]; then
+        STEPS=10
+      else
+        STEPS=15
+      fi
     else
       STEPS=50
     fi

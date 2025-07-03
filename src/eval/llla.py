@@ -169,9 +169,7 @@ def main():
 
     # Choose correct label map
     label_map = (
-        FASHION_MNIST_CLASSES
-        if args.dataset_name.lower() == "fashion-mnist"
-        else MNIST_CLASSES
+        FASHION_MNIST_CLASSES if args.dataset_name == "FashionMNIST" else MNIST_CLASSES
     )
 
     # Plot with label names

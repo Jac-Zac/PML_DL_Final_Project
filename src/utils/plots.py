@@ -215,6 +215,7 @@ def plot_uncertainty_metric(
         title: str or None. If multiple metrics, can be None or list of titles.
         xlabel, ylabel: axis labels. If None, auto-set.
         save_path: str or None to save figure instead of showing.
+        label_map: dict or None. Maps label indices to human-readable names.
     """
 
     # Convert tensor to numpy if needed
@@ -263,6 +264,13 @@ def plot_uncertainty_metric(
         for idx, label_idx in enumerate(samples):
             data = uncertainties[:, label_idx]
 
+            # Use label map if provided
+            label_name = (
+                label_map[label_idx]
+                if label_map and label_idx in label_map
+                else f"Label {label_idx}"
+            )
+
             if metric == "sum":
                 values = data.sum(axis=(-1, -2))
                 steps = range(T)
@@ -278,7 +286,6 @@ def plot_uncertainty_metric(
             elif metric == "mean_std":
                 means = data.mean(axis=(-1, -2))
                 stds = data.std(axis=(-1, -2))
-                label_name = label_map[label_idx] if label_map else f"Label {label_idx}"
                 ax.errorbar(
                     range(T),
                     means,
@@ -292,15 +299,15 @@ def plot_uncertainty_metric(
             else:
                 raise ValueError(f"Unsupported metric: {metric}")
 
-        label_name = label_map[label_idx] if label_map else f"Label {label_idx}"
-        ax.plot(
-            steps,
-            values,
-            marker="o",
-            linestyle="-",
-            color=cmap(idx),
-            label=label_name,
-        )
+            ax.plot(
+                steps,
+                values,
+                marker="o",
+                linestyle="-",
+                color=cmap(idx),
+                label=label_name,
+            )
+
         # Titles and labels
         if title is None:
             plot_title = (
@@ -312,7 +319,6 @@ def plot_uncertainty_metric(
             plot_title = title
 
         ax.set_title(plot_title)
-
         ax.set_xlabel(xlabel)
 
         if ylabel is None:

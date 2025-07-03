@@ -1,29 +1,33 @@
 ## BayesFlow: Extension of BayesDiff to Flow matching
 
 # Overview
-This project introduces BayesFlow, an innovative approach for estimating pixel-wise uncertainty in generated images, extending the principles of BayesDiff, presented in the paper "BayesDiff: Estimating Pixel-wise Uncertainty in Diffusion via Bayesian Inference" to the more efficient Flow Matching generative models. We leverage the Last Layer Laplace Approximation to quantify uncertainty during the generative process, providing nice and interpretable uncertainty maps. Our experiments demonstrate the effectiveness of BayesFlow on widely used datasets such as MNIST and Fashion-MNIST.
+
+This project introduces BayesFlow, an approach for estimating pixel-wise uncertainty in generated images, extending the principles of BayesDiff, presented in the paper "BayesDiff: Estimating Pixel-wise Uncertainty in Diffusion via Bayesian Inference" to the more efficient Flow Matching generative models. We leverage the Last Layer Laplace Approximation to quantify uncertainty during the generative process, providing nice and interpretable uncertainty maps. Our experiments demonstrate the effectiveness of BayesFlow on widely used datasets such as MNIST and Fashion-MNIST.
 
 ## Key Features
-*- BayesDiff Extension:* Adapts the Bayesian inference framework of BayesDiff from Diffusion Models to Flow Matching.
 
-*- Pixel-wise Uncertainty Estimation:* Computes detailed relative uncertainty maps for every pixel in generated images using the Last Layer Laplace Approximation.
+- **BayesDiff Extension:** Adapts the Bayesian inference framework of BayesDiff from Diffusion Models to Flow Matching.
 
-*- Flow Matching Extension:* Implements a Flow Matching generative model, known for its computational efficiency and coherent interpretability.
+- **Pixel-wise Uncertainty Estimation:** Computes detailed relative uncertainty maps for every pixel in generated images using the Last Layer Laplace Approximation.
 
-*- Flexible Uncertainty Calculation:* The uncertainty computation code is designed to work seamlessly with both newly trained and existing pretrained models.
+- **Flow Matching Extension:** Implements a Flow Matching generative model, known for its computational efficiency and coherent interpretability.
 
-*- Dual Implementations:* Includes implementations for both Flow Matching and Diffusion models for comparative analysis.
+- **Flexible Uncertainty Calculation:** The uncertainty computation code is designed to work seamlessly with both newly trained and existing pretrained models.
+
+- **Dual Implementations:** Includes implementations for both Flow Matching and Diffusion models for comparative analysis.
 
 ## Why Flow Matching for Uncertainty?
+
 Flow Matching models offer significant advantages for uncertainty quantification in generative processes compared to traditional diffusion models, like:
 
-*- Computational Efficiency*: Flow Matching typically requires fewer generation steps than Diffusion models and avoids stochastic processes, leading to faster inference.
+- **Computational Efficiency:** Flow Matching typically requires fewer generation steps than Diffusion models and avoids stochastic processes, leading to faster inference.
 
-*- Coherent Interpretation*: Flow models naturally integrate with Bayesian uncertainty estimates. The propagation of uncertainty within flow models is more explicit and better structured, providing clearer insights.
+- **Coherent Interpretation:** Flow models naturally integrate with Bayesian uncertainty estimates. The propagation of uncertainty within flow models is more explicit and better structured, providing clearer insights.
 
-*-Strong Empirical Performance*: Recent state-of-the-art models like SD3 and Flux leverage Flow Matching, demonstrating highly competitive results in image generation.
+- **Strong Empirical Performance:** Recent state-of-the-art models like SD3 and Flux leverage Flow Matching, demonstrating highly competitive results in image generation.
 
 ## Methodology Overview
+
 Our approach centers on extending uncertainty estimation to Flow Matching models.
 
 - **Flow Matching Base**: We utilize a Flow Matching model using a U-Net architecture.
@@ -32,9 +36,10 @@ Our approach centers on extending uncertainty estimation to Flow Matching models
 
 - **Uncertainty Propagation**: The core idea is to propagate the variance of this prediction along the generative process. We simulate the ODE that defines the flow using the Euler Method. Crucially, the uncertainty at each step accumulates from the previous state's uncertainty and the uncertainty in the predicted velocity field.
 
-- **Pixel-wise Uncertainty Maps**: This iterative process allows us to obtain a pixel-wise uncertainty map (diag(Var(x_1))) for the final generated image, indicating areas where the model is more or less confident.
+- **Pixel-wise Uncertainty Maps**: This iterative process allows us to obtain a pixel-wise uncertainty map $diag(Var(x_1))$ for the final generated image, indicating areas where the model is more or less confident.
 
 ## Experiments & Results
+
 We conducted experiments on the MNIST and Fashion-MNIST datasets to evaluate BayesFlow. Our findings demonstrate the ability to generate coherent pixel-wise uncertainty maps for both datasets. Visual comparisons highlight the differences in uncertainty behavior between Flow Matching and Diffusion models, providing insights into the benefits of our approach. The sum of pixel uncertainties over time further illustrates these distinctions across methods.
 
 [Training Runs Report](https://api.wandb.ai/links/jac-zac/h0ack55v)

@@ -42,3 +42,4 @@
 **/samples/*
 **/plots/*
 **/artifacts/*
+!.assets/diagram.png

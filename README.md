@@ -2,6 +2,8 @@
 
 # Overview
 
+![showcase](.assets/diagram.png)
+
 This project introduces BayesFlow, an approach for estimating pixel-wise uncertainty in generated images, extending the principles of BayesDiff, presented in the paper "BayesDiff: Estimating Pixel-wise Uncertainty in Diffusion via Bayesian Inference" to the more efficient Flow Matching generative models. We leverage the Last Layer Laplace Approximation to quantify uncertainty during the generative process, providing nice and interpretable uncertainty maps. Our experiments demonstrate the effectiveness of BayesFlow on widely used datasets such as MNIST and Fashion-MNIST.
 
 ## Key Features
